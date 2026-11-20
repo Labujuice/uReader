@@ -1,5 +1,7 @@
 # uReader — Web Serial UBX / NMEA GNSS Analyzer
 
+**Live Page:** https://labujuice.github.io/uReader/
+
 **uReader** is a single-file, zero-dependency HTML5 frontend tool for reading, analyzing, and debugging **UBX** and **NMEA 0183** GNSS serial streams (`/dev/ttyACMx`, `/dev/ttyUSBx`, COM ports) directly in the browser via the **Web Serial API**.
 
 Inspired by u-blox u-center, it works with any standard NMEA 0183 receiver and provides full bidirectional UBX monitoring and configuration for both **u-blox Gen 9/10** (`CFG-VALSET` / `VALGET` / `VALDEL`, e.g. M9, F9, M10) and **u-blox Gen 8 / 7** (legacy `CFG-PRT` / `CFG-MSG` / `CFG-RATE` / `CFG-NAV5` / `CFG-CFG`, e.g. M8N).
@@ -41,14 +43,17 @@ Inspired by u-blox u-center, it works with any standard NMEA 0183 receiver and p
 
 ## Requirements & Quick Start
 
-> **Important:** Browser security rules restrict the **Web Serial API** to **Chromium-based browsers** (Chrome, Edge, Opera) running in a **secure context** (`http://localhost` or `https://`). Opening `index.html` directly via `file://` will disable Web Serial.
+> **Important:** Browser security rules restrict the **Web Serial API** to **Chromium-based browsers** (Chrome, Edge, Opera) running in a **secure context** (`https://` or `http://localhost`). Opening `index.html` directly via `file://` will disable Web Serial.
 
-1. Start a local static HTTP server in this directory:
-   ```bash
-   python3 -m http.server 8080
-   ```
-2. Open **`http://localhost:8080`** in Chrome or Edge.
-3. Click **Connect Serial** and select your receiver port (e.g. `/dev/ttyACM0`, `/dev/ttyUSB0`).
+- **Option A — Online (GitHub Pages):** Open **https://labujuice.github.io/uReader/** directly in Chrome or Edge.
+- **Option B — Local Server:**
+  1. Start a local static HTTP server in this directory:
+     ```bash
+     python3 -m http.server 8080
+     ```
+  2. Open **`http://localhost:8080`** in Chrome or Edge.
+
+Then click **Connect Serial** and select your receiver port (e.g. `/dev/ttyACM0`, `/dev/ttyUSB0`).
 
 ### Linux Serial Permissions (`/dev/ttyACM*` / `/dev/ttyUSB*`)
 
