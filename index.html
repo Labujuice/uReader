@@ -610,8 +610,15 @@
     </div>
 
     <div class="tb-group">
+      <select id="selGenMode" title="Receiver UBX configuration protocol">
+        <option value="auto" selected>Gen: Auto</option>
+        <option value="m10">Gen: M10/M9 (VALSET)</option>
+        <option value="m8">Gen: M8/M7 (Legacy)</option>
+      </select>
       <button id="btnPollVer" disabled title="Poll UBX-MON-VER (0x0A 0x04)">Poll MON-VER</button>
-      <button id="btnEnableUbx" class="btn-ok" disabled title="Enable NAV-PVT/SAT/SIG/DOP/STATUS &amp; MON-RF/SPAN on UART1 &amp; USB">Enable M10 UBX</button>
+      <button id="btnEnableUbx" class="btn-ok" disabled title="Enable NAV-PVT, NAV-SAT, DOP, STATUS, MON-RF/HW">Enable UBX</button>
+      <button id="btnStopNmea" class="btn-warn" disabled title="Disable NMEA output &amp; keep UBX only (CFG-PRT + CFG-MSG / VALSET)">Stop NMEA</button>
+      <button id="btnSaveCfg" disabled title="Save current config to BBR/Flash (UBX-CFG-CFG for M8)">Save CFG</button>
       <button id="btnHotStart" disabled title="UBX-CFG-RST Hot Start (0x0000)">Hot</button>
       <button id="btnWarmStart" disabled title="UBX-CFG-RST Warm Start (0x0001)">Warm</button>
       <button id="btnColdStart" class="btn-warn" disabled title="UBX-CFG-RST Cold Start (0xFFFF)">Cold</button>
@@ -1209,11 +1216,17 @@
     '01:43': 'NAV-SIG',
     '05:00': 'ACK-NAK',
     '05:01': 'ACK-ACK',
+    '06:00': 'CFG-PRT',
+    '06:01': 'CFG-MSG',
     '06:04': 'CFG-RST',
+    '06:08': 'CFG-RATE',
+    '06:09': 'CFG-CFG',
+    '06:24': 'CFG-NAV5',
     '06:8a': 'CFG-VALSET',
     '06:8b': 'CFG-VALGET',
     '06:8c': 'CFG-VALDEL',
     '0a:04': 'MON-VER',
+    '0a:09': 'MON-HW',
     '0a:31': 'MON-SPAN',
     '0a:38': 'MON-RF'
   };
@@ -1230,6 +1243,9 @@
     0x10730001: { name: 'CFG-UART1INPROT-UBX', type: 'L' },
     0x10740001: { name: 'CFG-UART1OUTPROT-UBX', type: 'L' },
     0x10740002: { name: 'CFG-UART1OUTPROT-NMEA', type: 'L' },
+    0x10770001: { name: 'CFG-USBINPROT-UBX', type: 'L' },
+    0x10780001: { name: 'CFG-USBOUTPROT-UBX', type: 'L' },
+    0x10780002: { name: 'CFG-USBOUTPROT-NMEA', type: 'L' },
     // Signals
     0x1031001f: { name: 'CFG-SIGNAL-GPS_ENA', type: 'L' },
     0x10310001: { name: 'CFG-SIGNAL-GPS_L1CA_ENA', type: 'L' },
@@ -1288,6 +1304,10 @@
   const state = {
     connected: false,
     baudrate: 38400,
+    detectedGen: null, // 'm8' | 'm10' | null
+    cfgPrtByPort: {},  // portID -> Uint8Array(20)
+    activePortId: null,
+    pendingAutoFallbackAction: null, // 'enable_ubx' | 'stop_nmea' | null
     dtr: false,
     rts: false,
     rxBytes: 0,
@@ -1459,6 +1479,66 @@
     ]);
   }
 
+  // Legacy u-blox M8/M7 (Gen 8) CFG encoders
+  function encodeCfgMsg3(msgCls, msgId, rate) {
+    return buildUbxFrame(0x06, 0x01, [msgCls & 0xff, msgId & 0xff, rate & 0xff]);
+  }
+
+  function encodeCfgMsg8(msgCls, msgId, rateUart1, rateUsb) {
+    // Ports: 0=I2C, 1=UART1, 2=UART2, 3=USB, 4=SPI, 5=Reserved
+    return buildUbxFrame(0x06, 0x01, [
+      msgCls & 0xff, msgId & 0xff,
+      0x00, rateUart1 & 0xff, 0x00, rateUsb & 0xff, 0x00, 0x00
+    ]);
+  }
+
+  function encodeCfgPrtUpdate(portId, inProtoMask, outProtoMask, baudOverride = null) {
+    const cached = state.cfgPrtByPort[portId];
+    const p = cached ? new Uint8Array(cached) : new Uint8Array(20);
+    const dv = new DataView(p.buffer);
+    if (!cached) {
+      p[0] = portId & 0xff;
+      if (portId === 1) {
+        // Default 8N1 UART1
+        dv.setUint32(4, 0x000008d0, true);
+        dv.setUint32(8, baudOverride || state.baudrate || 115200, true);
+      }
+    } else if (baudOverride && portId === 1) {
+      dv.setUint32(8, baudOverride, true);
+    }
+    dv.setUint16(12, inProtoMask & 0xffff, true);
+    dv.setUint16(14, outProtoMask & 0xffff, true);
+    return buildUbxFrame(0x06, 0x00, p);
+  }
+
+  function encodeCfgRate(measRateMs, navRate, timeRef) {
+    const p = new Uint8Array(6);
+    const dv = new DataView(p.buffer);
+    dv.setUint16(0, measRateMs, true);
+    dv.setUint16(2, navRate || 1, true);
+    dv.setUint16(4, timeRef || 0, true);
+    return buildUbxFrame(0x06, 0x08, p);
+  }
+
+  function encodeCfgNav5(dynModel, fixMode) {
+    const p = new Uint8Array(36);
+    const dv = new DataView(p.buffer);
+    dv.setUint16(0, 0x0005, true); // bit0=dyn, bit2=posFixMode
+    p[2] = dynModel & 0xff;
+    p[3] = fixMode & 0xff;
+    return buildUbxFrame(0x06, 0x24, p);
+  }
+
+  function encodeCfgCfgSave() {
+    const p = new Uint8Array(13);
+    const dv = new DataView(p.buffer);
+    dv.setUint32(0, 0x00000000, true); // clearMask
+    dv.setUint32(4, 0x0000ffff, true); // saveMask (all)
+    dv.setUint32(8, 0x00000000, true); // loadMask
+    p[12] = 0x17; // devBBR | devFlash | devEEPROM | devSpiFlash
+    return buildUbxFrame(0x06, 0x09, p);
+  }
+
   // =========================================================================
   // 4. Interleaved NMEA + UBX Stream Parser
   // =========================================================================
@@ -1605,6 +1685,45 @@
       decoded.target = targetName;
       summary = `${ok ? 'ACK' : 'NAK'} -> ${targetName}`;
       setAckBanner(ok, `${ok ? 'ACK-ACK' : 'ACK-NAK'}: ${targetName}`);
+      if (!ok && ackCls === 0x06 && ackId === 0x8a) {
+        // VALSET rejected -> Gen 8 (M8/M7) receiver!
+        state.detectedGen = 'm8';
+        updateGenBadgeUI();
+        if (state.pendingAutoFallbackAction === 'enable_ubx') {
+          state.pendingAutoFallbackAction = null;
+          runM8EnableUbx();
+        } else if (state.pendingAutoFallbackAction === 'stop_nmea') {
+          state.pendingAutoFallbackAction = null;
+          runM8StopNmea();
+        }
+      } else if (ok && ackCls === 0x06 && ackId === 0x8a) {
+        state.detectedGen = 'm10';
+        state.pendingAutoFallbackAction = null;
+        updateGenBadgeUI();
+      } else if (!ok && ackCls === 0x06 && ackId === 0x00) {
+        // CFG-PRT rejected -> Gen 9/10 (M10/M9) receiver
+        if (!state.detectedGen) {
+          state.detectedGen = 'm10';
+          updateGenBadgeUI();
+        }
+      }
+    } else if (cls === 0x06 && id === 0x00 && payload.length >= 20) {
+      // UBX-CFG-PRT response
+      const portId = dv.getUint8(0);
+      const inProto = dv.getUint16(12, true);
+      const outProto = dv.getUint16(14, true);
+      const baudRate = dv.getUint32(8, true);
+      state.cfgPrtByPort[portId] = new Uint8Array(payload.slice(0, 20));
+      state.activePortId = portId;
+      if (!state.detectedGen) {
+        state.detectedGen = 'm8';
+        updateGenBadgeUI();
+      }
+      decoded.portID = portId;
+      decoded.baudRate = baudRate;
+      decoded.inProtoMask = `0x${inProto.toString(16).padStart(4, '0')}`;
+      decoded.outProtoMask = `0x${outProto.toString(16).padStart(4, '0')}`;
+      summary = `Port=${portId} in=0x${inProto.toString(16)} out=0x${outProto.toString(16)}`;
     } else if (cls === 0x01 && id === 0x07 && payload.length >= 92) {
       // UBX-NAV-PVT
       const iTOW = dv.getUint32(0, true);
@@ -1772,10 +1891,48 @@
         if (s) ext.push(s);
       }
       state.ver = { sw, hw, ext };
+      const verStr = `${sw} ${hw} ${ext.join(' ')}`;
+      const protMatch = verStr.match(/PROTVER[=:\s]+(\d+)/i);
+      if (protMatch) {
+        const maj = parseInt(protMatch[1], 10);
+        state.detectedGen = maj >= 27 ? 'm10' : 'm8';
+      } else if (/00080000|M8|ROM CORE [23]/i.test(verStr)) {
+        state.detectedGen = 'm8';
+      } else if (/000A0000|M10|SPG 5/i.test(verStr)) {
+        state.detectedGen = 'm10';
+      }
+      updateGenBadgeUI();
       decoded.swVersion = sw;
       decoded.hwVersion = hw;
       decoded.extensions = ext;
       summary = `${sw} (${hw})`;
+    } else if (cls === 0x0a && id === 0x09 && payload.length >= 60) {
+      // UBX-MON-HW (M8/M7 RF & Antenna monitor)
+      const noisePerMS = dv.getUint16(16, true);
+      const agcCnt = dv.getUint16(18, true);
+      const antStatus = dv.getUint8(20);
+      const antPower = dv.getUint8(21);
+      const flags = dv.getUint8(22);
+      const jamInd = dv.getUint8(45);
+      const jammingState = (flags >> 2) & 0x03;
+      state.rfBlocks = [{
+        blockId: 0,
+        jammingState,
+        antStatus,
+        antPower,
+        noisePerMS,
+        agcCnt,
+        jamInd,
+        ofsI: 0, magI: 0, ofsQ: 0, magQ: 0
+      }];
+      renderRfBlocks();
+      decoded.noisePerMS = noisePerMS;
+      decoded.agcCnt = agcCnt;
+      decoded.antStatus = antStatus;
+      decoded.antPower = antPower;
+      decoded.jammingState = jammingState;
+      decoded.jamInd = jamInd;
+      summary = `MON-HW jam=${jamInd} agc=${agcCnt} noise=${noisePerMS}`;
     } else if (cls === 0x0a && id === 0x38 && payload.length >= 4) {
       // UBX-MON-RF
       const nBlocks = dv.getUint8(1);
@@ -2124,9 +2281,23 @@
     });
     state.connected = true;
     state.baudrate = baud;
+    if (!autobaudActive) {
+      state.detectedGen = null;
+      state.cfgPrtByPort = {};
+      state.activePortId = null;
+      updateGenBadgeUI();
+    }
     streamParser.reset();
     startReadLoop();
     updateConnectionUI();
+    if (!autobaudActive) {
+      setTimeout(() => {
+        if (state.connected && !autobaudActive) {
+          writeSerial(buildUbxFrame(0x0a, 0x04)); // Poll MON-VER
+          writeSerial(buildUbxFrame(0x06, 0x00)); // Poll active CFG-PRT (works on M8, harmless on M10)
+        }
+      }, 150);
+    }
   }
 
   async function closeSerialPort(keepPortRef = false) {
@@ -2176,20 +2347,24 @@
     })();
   }
 
-  async function writeSerial(bytes) {
-    if (!port || !port.writable) return false;
-    const writer = port.writable.getWriter();
-    try {
-      await writer.write(bytes);
-      state.txBytes += bytes.length;
-      logHexChunk(bytes, 'TX');
-      return true;
-    } catch (err) {
-      setAckBanner(false, `TX error: ${err.message}`);
-      return false;
-    } finally {
-      writer.releaseLock();
-    }
+  let txQueue = Promise.resolve();
+  function writeSerial(bytes) {
+    txQueue = txQueue.then(async () => {
+      if (!port || !port.writable) return false;
+      const writer = port.writable.getWriter();
+      try {
+        await writer.write(bytes);
+        state.txBytes += bytes.length;
+        logHexChunk(bytes, 'TX');
+        return true;
+      } catch (err) {
+        setAckBanner(false, `TX error: ${err.message}`);
+        return false;
+      } finally {
+        writer.releaseLock();
+      }
+    });
+    return txQueue;
   }
 
   async function runAutobaud() {
@@ -2980,6 +3155,111 @@
     else el.value = String(val);
   }
 
+  function getEffectiveGen() {
+    const sel = document.getElementById('selGenMode').value;
+    if (sel === 'm8' || sel === 'm10') return sel;
+    return state.detectedGen || 'auto';
+  }
+
+  function updateGenBadgeUI() {
+    const sel = document.getElementById('selGenMode');
+    if (sel && sel.options && sel.options[0]) {
+      sel.options[0].textContent = state.detectedGen
+        ? `Gen: Auto (${state.detectedGen.toUpperCase()})`
+        : 'Gen: Auto';
+    }
+  }
+
+  function runM8EnableUbx() {
+    // Enable UBX input/output on active port + USB (port 3) + UART1 (port 1)
+    if (state.activePortId !== null) {
+      const cur = state.cfgPrtByPort[state.activePortId];
+      const dv = cur ? new DataView(cur.buffer, cur.byteOffset, cur.byteLength) : null;
+      const inMask = (dv ? dv.getUint16(12, true) : 0x0003) | 0x0001;
+      const outMask = (dv ? dv.getUint16(14, true) : 0x0003) | 0x0001;
+      writeSerial(encodeCfgPrtUpdate(state.activePortId, inMask, outMask));
+    } else {
+      // Default USB portID=3 (e.g. /dev/ttyACM0)
+      writeSerial(encodeCfgPrtUpdate(3, 0x0007, 0x0003));
+    }
+    const ubxMsgs = [
+      [0x01, 0x07], // NAV-PVT
+      [0x01, 0x35], // NAV-SAT
+      [0x01, 0x04], // NAV-DOP
+      [0x01, 0x03], // NAV-STATUS
+      [0x0a, 0x09]  // MON-HW
+    ];
+    for (const [c, m] of ubxMsgs) {
+      writeSerial(encodeCfgMsg8(c, m, 1, 1));
+      writeSerial(encodeCfgMsg3(c, m, 1));
+    }
+    writeSerial(buildUbxFrame(0x0a, 0x04));
+    setAckBanner(true, 'M8: Enabled UBX NAV-PVT/SAT/DOP/STATUS/MON-HW');
+  }
+
+  function runM8StopNmea() {
+    // Clear NMEA out bit (0x02), keep UBX out bit (0x01)
+    const portsToUpdate = new Set([3]);
+    if (state.activePortId !== null) portsToUpdate.add(state.activePortId);
+    for (const k of Object.keys(state.cfgPrtByPort)) portsToUpdate.add(parseInt(k, 10));
+    for (const pid of portsToUpdate) {
+      const cur = state.cfgPrtByPort[pid];
+      const dv = cur ? new DataView(cur.buffer, cur.byteOffset, cur.byteLength) : null;
+      const inMask = (dv ? dv.getUint16(12, true) : 0x0007) | 0x0001;
+      writeSerial(encodeCfgPrtUpdate(pid, inMask, 0x0001));
+    }
+    // Also explicitly zero out all standard NMEA 0xF0 sentence rates
+    const nmeaIds = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a];
+    for (const nid of nmeaIds) {
+      writeSerial(encodeCfgMsg8(0xf0, nid, 0, 0));
+      writeSerial(encodeCfgMsg3(0xf0, nid, 0));
+    }
+    setAckBanner(true, 'M8: Disabled NMEA (UBX Only)');
+  }
+
+  function runM10EnableUbx() {
+    const items = [
+      { key: 0x10730001, type: 'L', value: 1 }, // UART1INPROT-UBX
+      { key: 0x10740001, type: 'L', value: 1 }, // UART1OUTPROT-UBX
+      { key: 0x10770001, type: 'L', value: 1 }, // USBINPROT-UBX
+      { key: 0x10780001, type: 'L', value: 1 }, // USBOUTPROT-UBX
+      { key: 0x20910007, type: 'U1', value: 1 }, // NAV-PVT UART1
+      { key: 0x20910016, type: 'U1', value: 1 }, // NAV-SAT UART1
+      { key: 0x20910346, type: 'U1', value: 1 }, // NAV-SIG UART1
+      { key: 0x20910039, type: 'U1', value: 1 }, // NAV-DOP UART1
+      { key: 0x2091001b, type: 'U1', value: 1 }, // NAV-STATUS UART1
+      { key: 0x2091035a, type: 'U1', value: 1 }, // MON-RF UART1
+      { key: 0x2091038c, type: 'U1', value: 1 }, // MON-SPAN UART1
+      { key: 0x20910009, type: 'U1', value: 1 }, // NAV-PVT USB
+      { key: 0x20910018, type: 'U1', value: 1 }, // NAV-SAT USB
+      { key: 0x20910348, type: 'U1', value: 1 }, // NAV-SIG USB
+      { key: 0x2091003b, type: 'U1', value: 1 }, // NAV-DOP USB
+      { key: 0x2091001d, type: 'U1', value: 1 }, // NAV-STATUS USB
+      { key: 0x2091035c, type: 'U1', value: 1 }, // MON-RF USB
+      { key: 0x2091038e, type: 'U1', value: 1 }  // MON-SPAN USB
+    ];
+    writeSerial(encodeValset(getCfgLayer(), items));
+    writeSerial(buildUbxFrame(0x0a, 0x04));
+  }
+
+  function runM10StopNmea() {
+    const items = [
+      { key: 0x10740001, type: 'L', value: 1 }, // UART1OUTPROT-UBX
+      { key: 0x10740002, type: 'L', value: 0 }, // UART1OUTPROT-NMEA
+      { key: 0x10780001, type: 'L', value: 1 }, // USBOUTPROT-UBX
+      { key: 0x10780002, type: 'L', value: 0 }, // USBOUTPROT-NMEA
+      { key: 0x209100bb, type: 'U1', value: 0 }, // GGA UART1
+      { key: 0x209100ac, type: 'U1', value: 0 }, // RMC UART1
+      { key: 0x209100c0, type: 'U1', value: 0 }, // GSA UART1
+      { key: 0x209100c5, type: 'U1', value: 0 }, // GSV UART1
+      { key: 0x209100bd, type: 'U1', value: 0 }, // GGA USB
+      { key: 0x209100ae, type: 'U1', value: 0 }, // RMC USB
+      { key: 0x209100c2, type: 'U1', value: 0 }, // GSA USB
+      { key: 0x209100c7, type: 'U1', value: 0 }  // GSV USB
+    ];
+    writeSerial(encodeValset(getCfgLayer(), items));
+  }
+
   function updateConnectionUI() {
     const btnConn = document.getElementById('btnConnect');
     const dot = document.getElementById('sbDot');
@@ -3000,6 +3280,7 @@
 
     const gatedIds = [
       'btnAutobaud', 'btnDtr', 'btnRts', 'btnPollVer', 'btnEnableUbx',
+      'btnStopNmea', 'btnSaveCfg',
       'btnHotStart', 'btnWarmStart', 'btnColdStart', 'btnPollRf',
       'btnCfgReadAll', 'btnApplyRate', 'btnApplyNav', 'btnApplySignals',
       'btnApplyPort', 'btnApplyMsgOut', 'btnRawValget', 'btnRawValset',
@@ -3082,31 +3363,46 @@
   });
 
   document.getElementById('btnPollRf').addEventListener('click', () => {
-    writeSerial(buildUbxFrame(0x0a, 0x38));
-    writeSerial(buildUbxFrame(0x0a, 0x31));
+    if (getEffectiveGen() === 'm8') {
+      writeSerial(buildUbxFrame(0x0a, 0x09)); // MON-HW
+    } else {
+      writeSerial(buildUbxFrame(0x0a, 0x38)); // MON-RF
+      writeSerial(buildUbxFrame(0x0a, 0x31)); // MON-SPAN
+    }
   });
 
   document.getElementById('btnEnableUbx').addEventListener('click', () => {
-    const items = [
-      { key: 0x10740001, type: 'L', value: 1 }, // UART1OUTPROT-UBX
-      { key: 0x20910007, type: 'U1', value: 1 }, // NAV-PVT UART1
-      { key: 0x20910016, type: 'U1', value: 1 }, // NAV-SAT UART1
-      { key: 0x20910346, type: 'U1', value: 1 }, // NAV-SIG UART1
-      { key: 0x20910039, type: 'U1', value: 1 }, // NAV-DOP UART1
-      { key: 0x2091001b, type: 'U1', value: 1 }, // NAV-STATUS UART1
-      { key: 0x2091035a, type: 'U1', value: 1 }, // MON-RF UART1
-      { key: 0x2091038c, type: 'U1', value: 1 }, // MON-SPAN UART1
-      // Also USB equivalents
-      { key: 0x20910009, type: 'U1', value: 1 },
-      { key: 0x20910018, type: 'U1', value: 1 },
-      { key: 0x20910348, type: 'U1', value: 1 },
-      { key: 0x2091003b, type: 'U1', value: 1 },
-      { key: 0x2091001d, type: 'U1', value: 1 },
-      { key: 0x2091035c, type: 'U1', value: 1 },
-      { key: 0x2091038e, type: 'U1', value: 1 }
-    ];
-    writeSerial(encodeValset(0x01, items));
-    writeSerial(buildUbxFrame(0x0a, 0x04)); // Also poll MON-VER
+    const gen = getEffectiveGen();
+    if (gen === 'm8') {
+      runM8EnableUbx();
+    } else if (gen === 'm10') {
+      runM10EnableUbx();
+    } else {
+      // Auto: try VALSET; if NAKed by M8N, ACK-NAK handler automatically runs runM8EnableUbx()
+      state.pendingAutoFallbackAction = 'enable_ubx';
+      runM10EnableUbx();
+    }
+  });
+
+  document.getElementById('btnStopNmea').addEventListener('click', () => {
+    const gen = getEffectiveGen();
+    if (gen === 'm8') {
+      runM8StopNmea();
+    } else if (gen === 'm10') {
+      runM10StopNmea();
+    } else {
+      state.pendingAutoFallbackAction = 'stop_nmea';
+      runM10StopNmea();
+    }
+  });
+
+  document.getElementById('btnSaveCfg').addEventListener('click', () => {
+    if (getEffectiveGen() === 'm8') {
+      writeSerial(encodeCfgCfgSave());
+      setAckBanner(true, 'Sent UBX-CFG-CFG Save (BBR/Flash)');
+    } else {
+      setAckBanner(true, 'M10 persists automatically when Layer = BBR/Flash');
+    }
   });
 
   document.getElementById('btnHotStart').addEventListener('click', () => writeSerial(encodeCfgRst(0x0000, 0x01)));
@@ -3330,19 +3626,33 @@
   });
 
   document.getElementById('btnApplyRate').addEventListener('click', () => {
-    writeSerial(encodeValset(getCfgLayer(), [
-      { key: 0x30210001, type: 'U2', value: parseInt(document.getElementById('cfgRateMeas').value, 10) },
-      { key: 0x30210002, type: 'U2', value: parseInt(document.getElementById('cfgRateNav').value, 10) || 1 },
-      { key: 0x20210003, type: 'E1', value: parseInt(document.getElementById('cfgTimeRef').value, 10) }
-    ]));
+    const meas = parseInt(document.getElementById('cfgRateMeas').value, 10);
+    const nav = parseInt(document.getElementById('cfgRateNav').value, 10) || 1;
+    const tref = parseInt(document.getElementById('cfgTimeRef').value, 10);
+    if (getEffectiveGen() === 'm8') {
+      writeSerial(encodeCfgRate(meas, nav, tref));
+    } else {
+      writeSerial(encodeValset(getCfgLayer(), [
+        { key: 0x30210001, type: 'U2', value: meas },
+        { key: 0x30210002, type: 'U2', value: nav },
+        { key: 0x20210003, type: 'E1', value: tref }
+      ]));
+    }
   });
 
   document.getElementById('btnApplyNav').addEventListener('click', () => {
-    writeSerial(encodeValset(getCfgLayer(), [
-      { key: 0x20110021, type: 'E1', value: parseInt(document.getElementById('cfgDynModel').value, 10) },
-      { key: 0x20110011, type: 'E1', value: parseInt(document.getElementById('cfgFixMode').value, 10) },
-      { key: 0x20d00001, type: 'E1', value: parseInt(document.getElementById('cfgPmMode').value, 10) }
-    ]));
+    const dyn = parseInt(document.getElementById('cfgDynModel').value, 10);
+    const fix = parseInt(document.getElementById('cfgFixMode').value, 10);
+    const pm = parseInt(document.getElementById('cfgPmMode').value, 10);
+    if (getEffectiveGen() === 'm8') {
+      writeSerial(encodeCfgNav5(dyn, fix));
+    } else {
+      writeSerial(encodeValset(getCfgLayer(), [
+        { key: 0x20110021, type: 'E1', value: dyn },
+        { key: 0x20110011, type: 'E1', value: fix },
+        { key: 0x20d00001, type: 'E1', value: pm }
+      ]));
+    }
   });
 
   document.getElementById('btnApplySignals').addEventListener('click', () => {
@@ -3366,12 +3676,27 @@
 
   document.getElementById('btnApplyPort').addEventListener('click', () => {
     const chk = id => document.getElementById(id).checked ? 1 : 0;
-    writeSerial(encodeValset(getCfgLayer(), [
-      { key: 0x40520001, type: 'U4', value: parseInt(document.getElementById('cfgUart1Baud').value, 10) },
-      { key: 0x10730001, type: 'L', value: chk('cfgInUbx') },
-      { key: 0x10740001, type: 'L', value: chk('cfgOutUbx') },
-      { key: 0x10740002, type: 'L', value: chk('cfgOutNmea') }
-    ]));
+    const baud = parseInt(document.getElementById('cfgUart1Baud').value, 10);
+    const inUbx = chk('cfgInUbx');
+    const outUbx = chk('cfgOutUbx');
+    const outNmea = chk('cfgOutNmea');
+    if (getEffectiveGen() === 'm8') {
+      const targetPort = document.getElementById('selCfgPort').value;
+      const inMask = (inUbx ? 0x01 : 0x00) | 0x02;
+      const outMask = (outUbx ? 0x01 : 0x00) | (outNmea ? 0x02 : 0x00);
+      if (targetPort === 'uart1' || targetPort === 'both') writeSerial(encodeCfgPrtUpdate(1, inMask, outMask, baud));
+      if (targetPort === 'usb' || targetPort === 'both') writeSerial(encodeCfgPrtUpdate(3, inMask, outMask));
+    } else {
+      writeSerial(encodeValset(getCfgLayer(), [
+        { key: 0x40520001, type: 'U4', value: baud },
+        { key: 0x10730001, type: 'L', value: inUbx },
+        { key: 0x10740001, type: 'L', value: outUbx },
+        { key: 0x10740002, type: 'L', value: outNmea },
+        { key: 0x10770001, type: 'L', value: inUbx },
+        { key: 0x10780001, type: 'L', value: outUbx },
+        { key: 0x10780002, type: 'L', value: outNmea }
+      ]));
+    }
   });
 
   document.getElementById('btnApplyMsgOut').addEventListener('click', () => {
@@ -3382,6 +3707,21 @@
     const dop = parseInt(document.getElementById('rateNavDop').value, 10) || 0;
     const mon = parseInt(document.getElementById('rateMonRf').value, 10) || 0;
     const nmea = parseInt(document.getElementById('rateNmeaStd').value, 10) || 0;
+
+    if (getEffectiveGen() === 'm8') {
+      const rUart = (v) => (targetPort === 'uart1' || targetPort === 'both') ? v : 0;
+      const rUsb = (v) => (targetPort === 'usb' || targetPort === 'both') ? v : 0;
+      const ubxList = [
+        [0x01, 0x07, pvt], [0x01, 0x35, sat], [0x01, 0x04, dop], [0x01, 0x03, dop], [0x0a, 0x09, mon]
+      ];
+      for (const [c, m, v] of ubxList) {
+        writeSerial(encodeCfgMsg8(c, m, rUart(v), rUsb(v)));
+      }
+      for (const nid of [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08]) {
+        writeSerial(encodeCfgMsg8(0xf0, nid, rUart(nmea), rUsb(nmea)));
+      }
+      return;
+    }
 
     const pairs = [
       [0x20910007, pvt], [0x20910016, sat], [0x20910346, sig],
