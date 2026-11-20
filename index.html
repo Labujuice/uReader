@@ -1,0 +1,3516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>u-Reader M10 — Web Serial GNSS &amp; u-blox Analyzer</title>
+  <style>
+    :root {
+      --bg-app: #0b0f14;
+      --bg-bar: #111720;
+      --bg-panel: #151c26;
+      --bg-sub: #1b2330;
+      --bg-input: #0e141c;
+      --border: #283344;
+      --border-hi: #3a4a62;
+      --text: #e6edf3;
+      --text-dim: #8b9bb0;
+      --text-muted: #5c6c82;
+      --accent: #38bdf8;
+      --accent-dim: rgba(56, 189, 248, 0.14);
+      --ok: #22c55e;
+      --ok-dim: rgba(34, 197, 94, 0.15);
+      --warn: #f59e0b;
+      --warn-dim: rgba(245, 158, 11, 0.16);
+      --err: #ef4444;
+      --err-dim: rgba(239, 68, 68, 0.16);
+      --gps: #38bdf8;
+      --gal: #a78bfa;
+      --bds: #f59e0b;
+      --glo: #22c55e;
+      --qzss: #2dd4bf;
+      --sbas: #f472b6;
+      --mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg-app);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 12.5px;
+      line-height: 1.4;
+      overflow: hidden;
+    }
+
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Top Toolbar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--bg-bar);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding-right: 10px;
+      border-right: 1px solid var(--border);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .brand-badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+
+    .tb-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding-right: 8px;
+      border-right: 1px solid var(--border);
+    }
+    .tb-group:last-child { border-right: none; padding-right: 0; }
+
+    label.tb-lbl {
+      color: var(--text-dim);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    select, input[type="text"], input[type="number"] {
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 12px;
+      font-family: var(--mono);
+      outline: none;
+    }
+    select:focus, input:focus { border-color: var(--accent); }
+
+    button {
+      background: var(--bg-sub);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    button:hover:not(:disabled) {
+      background: #243042;
+      border-color: var(--border-hi);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    button.btn-primary {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #7dd3fc;
+    }
+    button.btn-primary:hover:not(:disabled) {
+      background: rgba(56, 189, 248, 0.28);
+    }
+    button.btn-danger {
+      background: var(--err-dim);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+    }
+    button.btn-ok {
+      background: var(--ok-dim);
+      border-color: rgba(34, 197, 94, 0.5);
+      color: #86efac;
+    }
+    button.btn-warn {
+      background: var(--warn-dim);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fcd34d;
+    }
+    button.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    button.btn-xs { padding: 2px 6px; font-size: 11px; }
+
+    /* Workspace Tabs + Panel Chips */
+    .subbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 10px;
+      background: #0f141c;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .ws-tabs, .panel-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 12px;
+      background: var(--bg-sub);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      user-select: none;
+    }
+    .chip.on {
+      background: var(--accent-dim);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: var(--text);
+    }
+
+    /* Telemetry Status Bar */
+    .statusbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 10px;
+      background: #0d131a;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      flex-shrink: 0;
+    }
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .stat-k { color: var(--text-muted); font-size: 10.5px; text-transform: uppercase; }
+    .stat-v { color: var(--text); font-weight: 600; }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      display: inline-block;
+    }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+    .dot.err { background: var(--err); }
+
+    .fix-pill {
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 11px;
+      background: var(--bg-sub);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .fix-pill.fix-3d { background: var(--ok-dim); border-color: var(--ok); color: #86efac; }
+    .fix-pill.fix-2d { background: var(--warn-dim); border-color: var(--warn); color: #fcd34d; }
+    .fix-pill.fix-no { background: var(--err-dim); border-color: rgba(239,68,68,0.45); color: #fca5a5; }
+
+    /* Compatibility Banner */
+    .compat-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 12px;
+      background: rgba(245, 158, 11, 0.14);
+      border-bottom: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fde68a;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .compat-banner code {
+      background: rgba(0,0,0,0.35);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--mono);
+    }
+
+    /* Main Workspace Grid */
+    .workspace {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-auto-rows: minmax(270px, auto);
+      gap: 8px;
+      align-content: start;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      min-height: 270px;
+      overflow: hidden;
+    }
+    .panel.hidden { display: none; }
+    .panel.maximized {
+      position: fixed;
+      inset: 8px;
+      z-index: 900;
+      min-height: 0;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+    }
+
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+
+    @media (max-width: 1280px) {
+      .span-3, .span-4 { grid-column: span 6; }
+      .span-5, .span-7, .span-8 { grid-column: span 12; }
+    }
+    @media (max-width: 820px) {
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
+    }
+
+    .panel-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--bg-sub);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .panel-title {
+      font-weight: 600;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: 0.2px;
+    }
+    .panel-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text-dim);
+    }
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .panel-body {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      padding: 8px;
+      min-height: 220px;
+    }
+    .panel-body.no-pad { padding: 0; overflow: hidden; }
+
+    canvas.fill {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Data Grid */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .kv-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+    }
+    .kv-card h4 {
+      margin: 0 0 5px 0;
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding-bottom: 3px;
+    }
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 1.5px 0;
+      font-size: 11.5px;
+    }
+    .kv-k { color: var(--text-dim); }
+    .kv-v { font-family: var(--mono); color: var(--text); text-align: right; word-break: break-all; }
+
+    /* Legend & Overlay Pills */
+    .legend-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      background: rgba(11, 15, 20, 0.85);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .leg-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .leg-dot.off { opacity: 0.35; }
+    .swatch {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    /* Hover Tooltip */
+    .canvas-tip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(11, 15, 20, 0.94);
+      border: 1px solid var(--border-hi);
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      z-index: 20;
+      display: none;
+      white-space: pre;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+
+    /* RF Cards */
+    .rf-blocks {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .meter-bar {
+      height: 6px;
+      background: #0b0f14;
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      margin-top: 3px;
+    }
+    .meter-fill {
+      height: 100%;
+      background: var(--ok);
+      transition: width 0.2s;
+    }
+
+    /* Config Center */
+    .cfg-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px;
+      background: #10161e;
+      border-bottom: 1px solid var(--border);
+    }
+    .cfg-section { display: none; padding: 8px; overflow-y: auto; flex: 1; }
+    .cfg-section.active { display: block; }
+    .cfg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 8px;
+    }
+    .cfg-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .cfg-card h5 {
+      margin: 0 0 6px 0;
+      font-size: 11.5px;
+      color: var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 11.5px;
+    }
+    .form-row label { color: var(--text-dim); }
+    .form-row select, .form-row input { width: 135px; }
+
+    .ack-toast {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .ack-toast.ok { border-color: var(--ok); color: #86efac; background: var(--ok-dim); }
+    .ack-toast.err { border-color: var(--err); color: #fca5a5; background: var(--err-dim); }
+
+    /* Console & Packet Table */
+    .split-console {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      height: 100%;
+      min-height: 250px;
+    }
+    @media (max-width: 900px) {
+      .split-console { grid-template-columns: 1fr; }
+    }
+    .pkt-list {
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .pkt-row {
+      display: grid;
+      grid-template-columns: 74px 44px 128px 46px 1fr;
+      gap: 6px;
+      padding: 3px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+    }
+    .pkt-row:hover { background: rgba(56,189,248,0.08); }
+    .pkt-row.selected { background: var(--accent-dim); }
+    .pkt-detail {
+      overflow-y: auto;
+      padding: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg-input);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-area {
+      height: 100%;
+      overflow-y: auto;
+      padding: 6px 8px;
+      background: var(--bg-input);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .nmea-line { color: #cbd5e1; }
+    .nmea-line.tx { color: #7dd3fc; }
+    .ubx-tag { color: var(--accent); font-weight: 600; }
+    .nmea-tag { color: var(--ok); font-weight: 600; }
+
+    table.mini-tbl {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    table.mini-tbl th, table.mini-tbl td {
+      text-align: left;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    table.mini-tbl th { color: var(--text-dim); background: var(--bg-sub); position: sticky; top: 0; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Web Serial Compatibility Banner -->
+  <div id="compatBanner" class="compat-banner">
+    <div>
+      <strong>Web Serial API unavailable in this context.</strong>
+      Browser security requires Chrome/Edge/Opera over <code>http://localhost</code> or <code>https://</code> (not <code>file://</code>).
+      Serve this directory locally with: <code>python3 -m http.server 8080</code> and open <code>http://localhost:8080</code>.
+    </div>
+    <button class="btn-xs" onclick="this.parentElement.style.display='none'">Dismiss</button>
+  </div>
+
+  <!-- Top Toolbar -->
+  <div class="toolbar">
+    <div class="brand">
+      <span>u-Reader</span>
+      <span class="brand-badge">M10 / UBX</span>
+    </div>
+
+    <div class="tb-group">
+      <button id="btnConnect" class="btn-primary">Connect Serial</button>
+      <label class="tb-lbl" for="selBaud">Baud</label>
+      <select id="selBaud">
+        <option value="4800">4800</option>
+        <option value="9600">9600</option>
+        <option value="19200">19200</option>
+        <option value="38400" selected>38400</option>
+        <option value="57600">57600</option>
+        <option value="115200">115200</option>
+        <option value="230400">230400</option>
+        <option value="460800">460800</option>
+        <option value="921600">921600</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input id="inpCustomBaud" type="number" min="1200" max="3000000" value="38400" style="width:76px; display:none;" title="Custom baudrate" />
+      <button id="btnAutobaud" disabled title="Scan common baudrates on connected port">Autobaud</button>
+      <button id="btnDtr" class="btn-xs" disabled title="Toggle DTR signal">DTR</button>
+      <button id="btnRts" class="btn-xs" disabled title="Toggle RTS signal">RTS</button>
+    </div>
+
+    <div class="tb-group">
+      <button id="btnPollVer" disabled title="Poll UBX-MON-VER (0x0A 0x04)">Poll MON-VER</button>
+      <button id="btnEnableUbx" class="btn-ok" disabled title="Enable NAV-PVT/SAT/SIG/DOP/STATUS &amp; MON-RF/SPAN on UART1 &amp; USB">Enable M10 UBX</button>
+      <button id="btnHotStart" disabled title="UBX-CFG-RST Hot Start (0x0000)">Hot</button>
+      <button id="btnWarmStart" disabled title="UBX-CFG-RST Warm Start (0x0001)">Warm</button>
+      <button id="btnColdStart" class="btn-warn" disabled title="UBX-CFG-RST Cold Start (0xFFFF)">Cold</button>
+    </div>
+
+    <div class="tb-group">
+      <button id="btnClearStats" title="Reset Deviation &amp; Time-Series history">Clear History</button>
+    </div>
+  </div>
+
+  <!-- Workspace Presets & Panel Visibility -->
+  <div class="subbar">
+    <div class="ws-tabs" id="wsTabs">
+      <span class="tb-lbl" style="margin-right:4px;">Workspace:</span>
+      <button class="btn-xs active" data-ws="overview">Overview</button>
+      <button class="btn-xs" data-ws="rf">RF &amp; Signal</button>
+      <button class="btn-xs" data-ws="pos">Position &amp; Map</button>
+      <button class="btn-xs" data-ws="config">M10 Config</button>
+      <button class="btn-xs" data-ws="console">Packet &amp; Console</button>
+    </div>
+    <div class="panel-toggles" id="panelToggles">
+      <span class="tb-lbl" style="margin-right:2px;">Panels:</span>
+      <span class="chip on" data-panel="pData">Data</span>
+      <span class="chip on" data-panel="pSky">Skyview</span>
+      <span class="chip on" data-panel="pCn0">C/N0</span>
+      <span class="chip on" data-panel="pDev">Deviation</span>
+      <span class="chip on" data-panel="pMap">Map</span>
+      <span class="chip on" data-panel="pTs">Time-Series</span>
+      <span class="chip on" data-panel="pRf">RF / MON-SPAN</span>
+      <span class="chip on" data-panel="pCfg">M10 Config</span>
+      <span class="chip on" data-panel="pCon">Console</span>
+    </div>
+  </div>
+
+  <!-- Live Telemetry Status Bar -->
+  <div class="statusbar">
+    <div class="stat-item">
+      <span id="sbDot" class="dot"></span>
+      <span id="sbPort" class="stat-v">Disconnected</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">Fix</span>
+      <span id="sbFix" class="fix-pill fix-no">NO FIX</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">UTC</span>
+      <span id="sbUtc" class="stat-v">--:--:--</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">Lat/Lon</span>
+      <span id="sbLatLon" class="stat-v">---, ---</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">SVs</span>
+      <span id="sbSvs" class="stat-v">0 / 0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">hAcc/vAcc</span>
+      <span id="sbAcc" class="stat-v">-- / -- m</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">PDOP</span>
+      <span id="sbPdop" class="stat-v">--</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">RX/TX</span>
+      <span id="sbBytes" class="stat-v">0 B / 0 B</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-k">Rate</span>
+      <span id="sbRate" class="stat-v">0 msg/s</span>
+    </div>
+    <div class="stat-item" style="margin-left:auto;">
+      <span id="sbAck" class="ack-toast">ACK: idle</span>
+    </div>
+  </div>
+
+  <!-- Main Multi-Pane Dashboard -->
+  <div class="workspace" id="workspace">
+
+    <!-- 1. Data / Fix Status View -->
+    <section class="panel span-4" id="pData">
+      <div class="panel-hdr">
+        <div class="panel-title">Data &amp; Fix Status <span class="panel-tag">NAV-PVT / NMEA</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs" data-max="pData">Max</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="kv-grid">
+          <div class="kv-card">
+            <h4>Position</h4>
+            <div class="kv-row"><span class="kv-k">Latitude</span><span class="kv-v" id="dLat">--</span></div>
+            <div class="kv-row"><span class="kv-k">Longitude</span><span class="kv-v" id="dLon">--</span></div>
+            <div class="kv-row"><span class="kv-k">Alt (MSL)</span><span class="kv-v" id="dHmsl">--</span></div>
+            <div class="kv-row"><span class="kv-k">Alt (Ellip)</span><span class="kv-v" id="dHellip">--</span></div>
+            <div class="kv-row"><span class="kv-k">Geoid Sep</span><span class="kv-v" id="dGeoid">--</span></div>
+          </div>
+          <div class="kv-card">
+            <h4>Velocity &amp; Time</h4>
+            <div class="kv-row"><span class="kv-k">UTC Time</span><span class="kv-v" id="dUtc">--</span></div>
+            <div class="kv-row"><span class="kv-k">iTOW</span><span class="kv-v" id="dItow">--</span></div>
+            <div class="kv-row"><span class="kv-k">Speed</span><span class="kv-v" id="dSpeed">--</span></div>
+            <div class="kv-row"><span class="kv-k">Heading</span><span class="kv-v" id="dHead">--</span></div>
+            <div class="kv-row"><span class="kv-k">Vel N/E/D</span><span class="kv-v" id="dVelNed">--</span></div>
+          </div>
+          <div class="kv-card">
+            <h4>Accuracy &amp; DOP</h4>
+            <div class="kv-row"><span class="kv-k">hAcc / vAcc</span><span class="kv-v" id="dHvAcc">--</span></div>
+            <div class="kv-row"><span class="kv-k">sAcc / headAcc</span><span class="kv-v" id="dShAcc">--</span></div>
+            <div class="kv-row"><span class="kv-k">GDOP / PDOP</span><span class="kv-v" id="dGpDop">--</span></div>
+            <div class="kv-row"><span class="kv-k">HDOP / VDOP</span><span class="kv-v" id="dHvDop">--</span></div>
+            <div class="kv-row"><span class="kv-k">TDOP / N / E</span><span class="kv-v" id="dTneDop">--</span></div>
+          </div>
+          <div class="kv-card">
+            <h4>Fix &amp; Receiver</h4>
+            <div class="kv-row"><span class="kv-k">Fix / Flags</span><span class="kv-v" id="dFix">--</span></div>
+            <div class="kv-row"><span class="kv-k">SVs Used/Trk</span><span class="kv-v" id="dSvs">--</span></div>
+            <div class="kv-row"><span class="kv-k">TTFF / Uptime</span><span class="kv-v" id="dTtff">--</span></div>
+            <div class="kv-row"><span class="kv-k">SW Version</span><span class="kv-v" id="dSwVer">--</span></div>
+            <div class="kv-row"><span class="kv-k">HW / Ext</span><span class="kv-v" id="dHwVer">--</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Skyview -->
+    <section class="panel span-4" id="pSky">
+      <div class="panel-hdr">
+        <div class="panel-title">Skyview <span class="panel-tag">NAV-SAT / GSV</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs" id="btnSkyTrail" title="Toggle satellite sky tracks">Trails</button>
+          <button class="btn-xs" data-max="pSky">Max</button>
+        </div>
+      </div>
+      <div class="legend-bar" id="gnssLegend">
+        <span class="leg-dot" data-gnss="0"><span class="swatch" style="background:var(--gps)"></span>GPS</span>
+        <span class="leg-dot" data-gnss="2"><span class="swatch" style="background:var(--gal)"></span>GAL</span>
+        <span class="leg-dot" data-gnss="3"><span class="swatch" style="background:var(--bds)"></span>BDS</span>
+        <span class="leg-dot" data-gnss="6"><span class="swatch" style="background:var(--glo)"></span>GLO</span>
+        <span class="leg-dot" data-gnss="5"><span class="swatch" style="background:var(--qzss)"></span>QZSS</span>
+        <span class="leg-dot" data-gnss="1"><span class="swatch" style="background:var(--sbas)"></span>SBAS</span>
+      </div>
+      <div class="panel-body no-pad">
+        <canvas id="cvSky" class="fill"></canvas>
+        <div id="tipSky" class="canvas-tip"></div>
+      </div>
+    </section>
+
+    <!-- 3. Signal Level (C/N0) -->
+    <section class="panel span-4" id="pCn0">
+      <div class="panel-hdr">
+        <div class="panel-title">Signal Level (C/N0) <span class="panel-tag" id="cn0SourceTag">NAV-SIG / SAT</span></div>
+        <div class="panel-actions">
+          <span id="cn0Summary" class="panel-tag">Mean: -- dBHz</span>
+          <button class="btn-xs" data-max="pCn0">Max</button>
+        </div>
+      </div>
+      <div class="panel-body no-pad">
+        <canvas id="cvCn0" class="fill"></canvas>
+        <div id="tipCn0" class="canvas-tip"></div>
+      </div>
+    </section>
+
+    <!-- 4. Deviation Map -->
+    <section class="panel span-4" id="pDev">
+      <div class="panel-hdr">
+        <div class="panel-title">Deviation Map <span class="panel-tag">CEP50 / R95</span></div>
+        <div class="panel-actions">
+          <select id="selDevScale" style="font-size:11px; padding:1px 4px;">
+            <option value="auto" selected>Auto</option>
+            <option value="1">±1 m</option>
+            <option value="2">±2 m</option>
+            <option value="5">±5 m</option>
+            <option value="10">±10 m</option>
+            <option value="25">±25 m</option>
+            <option value="50">±50 m</option>
+          </select>
+          <button class="btn-xs" id="btnDevSetRef" title="Lock current fix as reference origin">Lock Ref</button>
+          <button class="btn-xs" id="btnDevMeanRef" title="Use rolling sample mean as reference">Mean Ref</button>
+          <button class="btn-xs" data-max="pDev">Max</button>
+        </div>
+      </div>
+      <div class="legend-bar" id="devStatsBar">
+        <span id="devStatsText" style="font-family:var(--mono); color:var(--text-dim);">Samples: 0 | CEP50: -- m | R95: -- m</span>
+      </div>
+      <div class="panel-body no-pad">
+        <canvas id="cvDev" class="fill"></canvas>
+      </div>
+    </section>
+
+    <!-- 5. Slippy Tile Map -->
+    <section class="panel span-4" id="pMap">
+      <div class="panel-hdr">
+        <div class="panel-title">Position Map <span class="panel-tag">OSM / Offline Grid</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs active" id="btnMapFollow">Follow</button>
+          <button class="btn-xs" id="btnMapZoomIn">+</button>
+          <button class="btn-xs" id="btnMapZoomOut">-</button>
+          <button class="btn-xs" data-max="pMap">Max</button>
+        </div>
+      </div>
+      <div class="panel-body no-pad">
+        <canvas id="cvMap" class="fill"></canvas>
+      </div>
+    </section>
+
+    <!-- 6. Time-Series Telemetry -->
+    <section class="panel span-4" id="pTs">
+      <div class="panel-hdr">
+        <div class="panel-title">Time-Series Telemetry <span class="panel-tag">C/N0 · Acc · DOP · SVs</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs" data-max="pTs">Max</button>
+        </div>
+      </div>
+      <div class="panel-body no-pad">
+        <canvas id="cvTs" class="fill"></canvas>
+      </div>
+    </section>
+
+    <!-- 7. M10 RF & MON-SPAN -->
+    <section class="panel span-6" id="pRf">
+      <div class="panel-hdr">
+        <div class="panel-title">M10 RF Monitor &amp; Spectrum <span class="panel-tag">MON-RF / MON-SPAN</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs" id="btnPollRf" disabled>Poll RF/SPAN</button>
+          <button class="btn-xs" id="btnSpanHold">Max-Hold</button>
+          <button class="btn-xs" data-max="pRf">Max</button>
+        </div>
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column;">
+        <div class="rf-blocks" id="rfBlocksContainer">
+          <div class="kv-card">
+            <h4>RF Block 0 (Waiting for UBX-MON-RF)</h4>
+            <div class="kv-row"><span class="kv-k">Jamming State</span><span class="kv-v">--</span></div>
+            <div class="kv-row"><span class="kv-k">CW Jam Ind</span><span class="kv-v">-- / 255</span></div>
+            <div class="kv-row"><span class="kv-k">AGC / Noise/ms</span><span class="kv-v">--</span></div>
+            <div class="kv-row"><span class="kv-k">Antenna</span><span class="kv-v">--</span></div>
+          </div>
+        </div>
+        <div style="flex:1; min-height:170px; position:relative; border:1px solid var(--border); border-radius:4px; background:var(--bg-input); overflow:hidden;">
+          <canvas id="cvSpan" class="fill"></canvas>
+          <div id="tipSpan" class="canvas-tip"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. M10 Configuration Center -->
+    <section class="panel span-6" id="pCfg">
+      <div class="panel-hdr">
+        <div class="panel-title">M10 Configuration Center <span class="panel-tag">VALSET / VALGET / VALDEL</span></div>
+        <div class="panel-actions">
+          <label class="tb-lbl">Layer:</label>
+          <select id="selCfgLayer" style="font-size:11px; padding:1px 4px;">
+            <option value="1">RAM</option>
+            <option value="3" selected>RAM + BBR</option>
+            <option value="7">RAM + BBR + Flash</option>
+          </select>
+          <label class="tb-lbl">Port:</label>
+          <select id="selCfgPort" style="font-size:11px; padding:1px 4px;">
+            <option value="uart1" selected>UART1</option>
+            <option value="usb">USB</option>
+            <option value="both">Both</option>
+          </select>
+          <button class="btn-xs btn-primary" id="btnCfgReadAll" disabled>VALGET Poll</button>
+          <button class="btn-xs" data-max="pCfg">Max</button>
+        </div>
+      </div>
+      <div class="cfg-tabs" id="cfgTabs">
+        <button class="btn-xs active" data-cfgtab="cfgNav">Nav &amp; Rate</button>
+        <button class="btn-xs" data-cfgtab="cfgSig">GNSS Signals</button>
+        <button class="btn-xs" data-cfgtab="cfgMsg">Message Rates &amp; Port</button>
+        <button class="btn-xs" data-cfgtab="cfgRaw">Raw Key-Value &amp; Reset</button>
+      </div>
+      <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
+        <!-- Nav & Rate -->
+        <div class="cfg-section active" id="cfgNav">
+          <div class="cfg-grid">
+            <div class="cfg-card">
+              <h5>Navigation Rate &amp; Time <span class="panel-tag">CFG-RATE</span></h5>
+              <div class="form-row">
+                <label>Meas Period (ms)</label>
+                <select id="cfgRateMeas">
+                  <option value="1000">1000 ms (1 Hz)</option>
+                  <option value="500">500 ms (2 Hz)</option>
+                  <option value="200">200 ms (5 Hz)</option>
+                  <option value="100">100 ms (10 Hz)</option>
+                  <option value="2000">2000 ms (0.5 Hz)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Nav Ratio (cycles)</label>
+                <input id="cfgRateNav" type="number" min="1" max="127" value="1" />
+              </div>
+              <div class="form-row">
+                <label>Time Ref (TIMEREF)</label>
+                <select id="cfgTimeRef">
+                  <option value="0">0: UTC</option>
+                  <option value="1">1: GPS</option>
+                  <option value="2">2: GLONASS</option>
+                  <option value="3">3: BeiDou</option>
+                  <option value="4">4: Galileo</option>
+                </select>
+              </div>
+              <button class="btn-xs btn-primary" id="btnApplyRate" disabled>Apply CFG-RATE (VALSET)</button>
+            </div>
+
+            <div class="cfg-card">
+              <h5>Platform &amp; Fix Mode <span class="panel-tag">CFG-NAVSPG / PM</span></h5>
+              <div class="form-row">
+                <label>Dynamic Model</label>
+                <select id="cfgDynModel">
+                  <option value="0">0: Portable</option>
+                  <option value="2">2: Stationary</option>
+                  <option value="3">3: Pedestrian</option>
+                  <option value="4">4: Automotive</option>
+                  <option value="5">5: Sea</option>
+                  <option value="6">6: Airborne &lt;1g</option>
+                  <option value="7">7: Airborne &lt;2g</option>
+                  <option value="8">8: Airborne &lt;4g</option>
+                  <option value="9">9: Wrist</option>
+                  <option value="10">10: Bike</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Fix Mode</label>
+                <select id="cfgFixMode">
+                  <option value="3">3: Auto 2D/3D</option>
+                  <option value="2">2: 3D Only</option>
+                  <option value="1">1: 2D Only</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Power Mode (PM)</label>
+                <select id="cfgPmMode">
+                  <option value="0">0: Full Power</option>
+                  <option value="1">1: PSMOO (On/Off)</option>
+                  <option value="2">2: PSMCT (Cyclic Track)</option>
+                </select>
+              </div>
+              <button class="btn-xs btn-primary" id="btnApplyNav" disabled>Apply Nav/PM (VALSET)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- GNSS Signals -->
+        <div class="cfg-section" id="cfgSig">
+          <div class="cfg-card" style="margin-bottom:8px;">
+            <h5>u-blox M10 Concurrent Constellations <span class="panel-tag">Max 4 Major GNSS</span></h5>
+            <div style="font-size:11px; color:var(--text-dim); margin-bottom:6px;">
+              M10 SPG 5.x supports up to 4 concurrent constellations (e.g. GPS + GAL + BDS + GLO, plus QZSS/SBAS).
+            </div>
+            <div class="cfg-grid">
+              <div>
+                <div class="form-row"><label>GPS Enable (0x1031001f)</label><input type="checkbox" id="sigGps" checked /></div>
+                <div class="form-row"><label>GPS L1C/A (0x10310001)</label><input type="checkbox" id="sigGpsL1" checked /></div>
+                <div class="form-row"><label>Galileo Enable (0x10310021)</label><input type="checkbox" id="sigGal" checked /></div>
+                <div class="form-row"><label>Galileo E1 (0x10310007)</label><input type="checkbox" id="sigGalE1" checked /></div>
+              </div>
+              <div>
+                <div class="form-row"><label>BeiDou Enable (0x10310022)</label><input type="checkbox" id="sigBds" checked /></div>
+                <div class="form-row"><label>BDS B1I (0x1031000d)</label><input type="checkbox" id="sigBdsB1" checked /></div>
+                <div class="form-row"><label>BDS B1C (0x1031000f)</label><input type="checkbox" id="sigBdsB1c" checked /></div>
+                <div class="form-row"><label>GLONASS Enable (0x10310025)</label><input type="checkbox" id="sigGlo" /></div>
+              </div>
+              <div>
+                <div class="form-row"><label>GLO L1 (0x10310018)</label><input type="checkbox" id="sigGloL1" /></div>
+                <div class="form-row"><label>QZSS Enable (0x10310024)</label><input type="checkbox" id="sigQzss" checked /></div>
+                <div class="form-row"><label>QZSS L1C/A (0x10310012)</label><input type="checkbox" id="sigQzssL1" checked /></div>
+                <div class="form-row"><label>QZSS L1S (0x10310014)</label><input type="checkbox" id="sigQzssL1s" /></div>
+                <div class="form-row"><label>SBAS Enable (0x10310020)</label><input type="checkbox" id="sigSbas" checked /></div>
+              </div>
+            </div>
+            <button class="btn-xs btn-primary" id="btnApplySignals" disabled>Apply CFG-SIGNAL (VALSET)</button>
+          </div>
+        </div>
+
+        <!-- Message Rates & Port -->
+        <div class="cfg-section" id="cfgMsg">
+          <div class="cfg-grid">
+            <div class="cfg-card">
+              <h5>UART1 Port &amp; Protocols <span class="panel-tag">CFG-UART1</span></h5>
+              <div class="form-row">
+                <label>UART1 Baudrate</label>
+                <select id="cfgUart1Baud">
+                  <option value="9600">9600</option>
+                  <option value="38400" selected>38400</option>
+                  <option value="57600">57600</option>
+                  <option value="115200">115200</option>
+                  <option value="230400">230400</option>
+                  <option value="460800">460800</option>
+                  <option value="921600">921600</option>
+                </select>
+              </div>
+              <div class="form-row"><label>UART1 In UBX</label><input type="checkbox" id="cfgInUbx" checked /></div>
+              <div class="form-row"><label>UART1 Out UBX</label><input type="checkbox" id="cfgOutUbx" checked /></div>
+              <div class="form-row"><label>UART1 Out NMEA</label><input type="checkbox" id="cfgOutNmea" checked /></div>
+              <button class="btn-xs btn-primary" id="btnApplyPort" disabled>Apply UART1 (VALSET)</button>
+            </div>
+
+            <div class="cfg-card">
+              <h5>UBX &amp; NMEA Output Rates <span class="panel-tag">CFG-MSGOUT</span></h5>
+              <div class="form-row"><label>UBX-NAV-PVT</label><input id="rateNavPvt" type="number" min="0" max="255" value="1" /></div>
+              <div class="form-row"><label>UBX-NAV-SAT</label><input id="rateNavSat" type="number" min="0" max="255" value="1" /></div>
+              <div class="form-row"><label>UBX-NAV-SIG</label><input id="rateNavSig" type="number" min="0" max="255" value="1" /></div>
+              <div class="form-row"><label>UBX-NAV-DOP / STATUS</label><input id="rateNavDop" type="number" min="0" max="255" value="1" /></div>
+              <div class="form-row"><label>UBX-MON-RF / SPAN</label><input id="rateMonRf" type="number" min="0" max="255" value="1" /></div>
+              <div class="form-row"><label>NMEA GGA / RMC / GSA / GSV</label><input id="rateNmeaStd" type="number" min="0" max="255" value="1" /></div>
+              <button class="btn-xs btn-primary" id="btnApplyMsgOut" disabled>Apply MSGOUT (VALSET)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw Key-Value & Reset -->
+        <div class="cfg-section" id="cfgRaw">
+          <div class="cfg-grid" style="margin-bottom:8px;">
+            <div class="cfg-card">
+              <h5>Raw Key-Value Editor <span class="panel-tag">0x########</span></h5>
+              <div class="form-row">
+                <label>Key ID (Hex)</label>
+                <input id="rawKeyId" type="text" value="0x30210001" />
+              </div>
+              <div class="form-row">
+                <label>Value Type</label>
+                <select id="rawKeyType">
+                  <option value="L">L / U1 (1 byte)</option>
+                  <option value="I1">I1 (1 byte signed)</option>
+                  <option value="U2" selected>U2 (2 bytes)</option>
+                  <option value="I2">I2 (2 bytes signed)</option>
+                  <option value="U4">U4 (4 bytes)</option>
+                  <option value="I4">I4 (4 bytes signed)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Value (Dec or 0xHex)</label>
+                <input id="rawKeyVal" type="text" value="1000" />
+              </div>
+              <div style="display:flex; gap:5px;">
+                <button class="btn-xs" id="btnRawValget" disabled>VALGET</button>
+                <button class="btn-xs btn-primary" id="btnRawValset" disabled>VALSET</button>
+                <button class="btn-xs btn-danger" id="btnRawValdel" disabled>VALDEL</button>
+              </div>
+            </div>
+
+            <div class="cfg-card">
+              <h5>Receiver Reset Control <span class="panel-tag">UBX-CFG-RST</span></h5>
+              <div class="form-row">
+                <label>navBbrMask</label>
+                <select id="rstBbrMask">
+                  <option value="0x0000">0x0000: Hot Start</option>
+                  <option value="0x0001">0x0001: Warm Start (Clr Eph)</option>
+                  <option value="0xFFFF">0xFFFF: Cold Start (Clr All)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>resetMode</label>
+                <select id="rstMode">
+                  <option value="0x01">0x01: Controlled SW Reset</option>
+                  <option value="0x02">0x02: Controlled GNSS Only</option>
+                  <option value="0x00">0x00: HW Watchdog Reset</option>
+                  <option value="0x04">0x04: HW After Shutdown</option>
+                  <option value="0x08">0x08: Controlled GNSS Stop</option>
+                  <option value="0x09">0x09: Controlled GNSS Start</option>
+                </select>
+              </div>
+              <button class="btn-xs btn-warn" id="btnSendRst" disabled>Send UBX-CFG-RST</button>
+            </div>
+          </div>
+
+          <div style="max-height:150px; overflow:auto; border:1px solid var(--border); border-radius:4px;">
+            <table class="mini-tbl">
+              <thead>
+                <tr><th>Key ID</th><th>Key Name</th><th>Layer</th><th>Raw Hex</th><th>Decoded Value</th></tr>
+              </thead>
+              <tbody id="valgetTableBody">
+                <tr><td colspan="5" style="color:var(--text-muted);">No VALGET responses yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. Packet Inspector, NMEA Console, Hex View & TX -->
+    <section class="panel span-12" id="pCon">
+      <div class="panel-hdr">
+        <div class="panel-title">Packet Inspector &amp; Serial Console <span class="panel-tag">NMEA 0183 + UBX</span></div>
+        <div class="panel-actions">
+          <button class="btn-xs active" data-contab="conPackets">Packet Tree</button>
+          <button class="btn-xs" data-contab="conText">Text Console</button>
+          <button class="btn-xs" data-contab="conHex">Hex View</button>
+          <button class="btn-xs" data-contab="conTx">TX Builder</button>
+          <button class="btn-xs" id="btnConPause">Pause</button>
+          <button class="btn-xs" id="btnConClear">Clear</button>
+          <button class="btn-xs" data-max="pCon">Max</button>
+        </div>
+      </div>
+      <div class="panel-body no-pad" style="display:flex; flex-direction:column; min-height:260px;">
+        <!-- Packet Tree -->
+        <div id="conPackets" class="split-console" style="flex:1;">
+          <div class="pkt-list" id="pktList"></div>
+          <div class="pkt-detail" id="pktDetail">Click any received UBX or NMEA packet on the left to inspect its decoded fields and raw hex payload.</div>
+        </div>
+
+        <!-- Text Console -->
+        <div id="conText" class="log-area" style="display:none; flex:1;"></div>
+
+        <!-- Hex View -->
+        <div id="conHex" class="log-area" style="display:none; flex:1;"></div>
+
+        <!-- TX Builder -->
+        <div id="conTx" style="display:none; padding:10px; overflow:auto; flex:1;">
+          <div class="cfg-grid">
+            <div class="cfg-card">
+              <h5>Send UBX Frame (Auto Header/Checksum)</h5>
+              <div class="form-row">
+                <label>Class / ID (Hex)</label>
+                <div style="display:flex; gap:4px;">
+                  <input id="txUbxCls" type="text" value="0x0A" style="width:60px;" />
+                  <input id="txUbxId" type="text" value="0x04" style="width:60px;" />
+                </div>
+              </div>
+              <div style="margin-bottom:6px;">
+                <label style="color:var(--text-dim); font-size:11px; display:block; margin-bottom:3px;">Payload Hex Bytes (space separated, empty for poll)</label>
+                <input id="txUbxPayload" type="text" value="" placeholder="e.g. 00 01 00 00" style="width:100%;" />
+              </div>
+              <button class="btn-xs btn-primary" id="btnTxUbx" disabled>Send UBX Frame</button>
+            </div>
+            <div class="cfg-card">
+              <h5>Send NMEA Sentence (Auto *CS\r\n)</h5>
+              <div style="margin-bottom:6px;">
+                <label style="color:var(--text-dim); font-size:11px; display:block; margin-bottom:3px;">Sentence Body (with or without leading $)</label>
+                <input id="txNmeaBody" type="text" value="$PUBX,00" style="width:100%;" />
+              </div>
+              <button class="btn-xs btn-primary" id="btnTxNmea" disabled>Send NMEA</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =========================================================================
+  // 1. u-blox M10 Protocol & Configuration Database
+  // =========================================================================
+  const GNSS_NAMES = {
+    0: 'GPS', 1: 'SBAS', 2: 'GAL', 3: 'BDS', 4: 'IMES', 5: 'QZSS', 6: 'GLO', 7: 'NavIC'
+  };
+  const GNSS_PREFIX = {
+    0: 'G', 1: 'S', 2: 'E', 3: 'C', 4: 'I', 5: 'J', 6: 'R', 7: 'N'
+  };
+  const GNSS_COLORS = {
+    0: '#38bdf8', // GPS
+    1: '#f472b6', // SBAS
+    2: '#a78bfa', // GAL
+    3: '#f59e0b', // BDS
+    4: '#94a3b8',
+    5: '#2dd4bf', // QZSS
+    6: '#22c55e', // GLO
+    7: '#fb7185'
+  };
+
+  // u-blox M10 SIG IDs (gnssId -> sigId -> label)
+  const SIG_NAMES = {
+    0: { 0: 'L1C/A', 3: 'L2CL', 4: 'L2CM', 6: 'L5I', 7: 'L5Q' },
+    1: { 0: 'L1C/A' },
+    2: { 0: 'E1C', 1: 'E1B', 3: 'E5aI', 4: 'E5aQ', 5: 'E5bI', 6: 'E5bQ' },
+    3: { 0: 'B1I D1', 1: 'B1I D2', 2: 'B2I D1', 3: 'B2I D2', 5: 'B1C', 7: 'B2a' },
+    5: { 0: 'L1C/A', 1: 'L1S', 4: 'L2CM', 5: 'L2CL', 8: 'L5I', 9: 'L5Q' },
+    6: { 0: 'L1OF', 2: 'L2OF' }
+  };
+
+  const FIX_TYPES = {
+    0: 'NO FIX', 1: 'DR ONLY', 2: '2D FIX', 3: '3D FIX', 4: 'GNSS+DR', 5: 'TIME ONLY'
+  };
+
+  const DYN_MODELS = {
+    0: 'Portable', 2: 'Stationary', 3: 'Pedestrian', 4: 'Automotive',
+    5: 'Sea', 6: 'Airborne <1g', 7: 'Airborne <2g', 8: 'Airborne <4g',
+    9: 'Wrist', 10: 'Bike'
+  };
+
+  const UBX_MSG_NAMES = {
+    '01:03': 'NAV-STATUS',
+    '01:04': 'NAV-DOP',
+    '01:07': 'NAV-PVT',
+    '01:21': 'NAV-TIMEUTC',
+    '01:35': 'NAV-SAT',
+    '01:43': 'NAV-SIG',
+    '05:00': 'ACK-NAK',
+    '05:01': 'ACK-ACK',
+    '06:04': 'CFG-RST',
+    '06:8a': 'CFG-VALSET',
+    '06:8b': 'CFG-VALGET',
+    '06:8c': 'CFG-VALDEL',
+    '0a:04': 'MON-VER',
+    '0a:31': 'MON-SPAN',
+    '0a:38': 'MON-RF'
+  };
+
+  // Verified u-blox Generation 10 (M10 SPG 5.x) Configuration Key IDs
+  const M10_KEYS = {
+    0x30210001: { name: 'CFG-RATE-MEAS', type: 'U2' },
+    0x30210002: { name: 'CFG-RATE-NAV', type: 'U2' },
+    0x20210003: { name: 'CFG-RATE-TIMEREF', type: 'E1' },
+    0x20110011: { name: 'CFG-NAVSPG-FIXMODE', type: 'E1' },
+    0x20110021: { name: 'CFG-NAVSPG-DYNMODEL', type: 'E1' },
+    0x20d00001: { name: 'CFG-PM-OPERATEMODE', type: 'E1' },
+    0x40520001: { name: 'CFG-UART1-BAUDRATE', type: 'U4' },
+    0x10730001: { name: 'CFG-UART1INPROT-UBX', type: 'L' },
+    0x10740001: { name: 'CFG-UART1OUTPROT-UBX', type: 'L' },
+    0x10740002: { name: 'CFG-UART1OUTPROT-NMEA', type: 'L' },
+    // Signals
+    0x1031001f: { name: 'CFG-SIGNAL-GPS_ENA', type: 'L' },
+    0x10310001: { name: 'CFG-SIGNAL-GPS_L1CA_ENA', type: 'L' },
+    0x10310020: { name: 'CFG-SIGNAL-SBAS_ENA', type: 'L' },
+    0x10310021: { name: 'CFG-SIGNAL-GAL_ENA', type: 'L' },
+    0x10310007: { name: 'CFG-SIGNAL-GAL_E1_ENA', type: 'L' },
+    0x10310022: { name: 'CFG-SIGNAL-BDS_ENA', type: 'L' },
+    0x1031000d: { name: 'CFG-SIGNAL-BDS_B1_ENA', type: 'L' },
+    0x1031000f: { name: 'CFG-SIGNAL-BDS_B1C_ENA', type: 'L' },
+    0x10310024: { name: 'CFG-SIGNAL-QZSS_ENA', type: 'L' },
+    0x10310012: { name: 'CFG-SIGNAL-QZSS_L1CA_ENA', type: 'L' },
+    0x10310014: { name: 'CFG-SIGNAL-QZSS_L1S_ENA', type: 'L' },
+    0x10310025: { name: 'CFG-SIGNAL-GLO_ENA', type: 'L' },
+    0x10310018: { name: 'CFG-SIGNAL-GLO_L1_ENA', type: 'L' },
+    // MSGOUT UART1
+    0x20910007: { name: 'CFG-MSGOUT-UBX_NAV_PVT_UART1', type: 'U1' },
+    0x20910016: { name: 'CFG-MSGOUT-UBX_NAV_SAT_UART1', type: 'U1' },
+    0x20910346: { name: 'CFG-MSGOUT-UBX_NAV_SIG_UART1', type: 'U1' },
+    0x20910039: { name: 'CFG-MSGOUT-UBX_NAV_DOP_UART1', type: 'U1' },
+    0x2091001b: { name: 'CFG-MSGOUT-UBX_NAV_STATUS_UART1', type: 'U1' },
+    0x2091035a: { name: 'CFG-MSGOUT-UBX_MON_RF_UART1', type: 'U1' },
+    0x2091038c: { name: 'CFG-MSGOUT-UBX_MON_SPAN_UART1', type: 'U1' },
+    0x209100bb: { name: 'CFG-MSGOUT-NMEA_ID_GGA_UART1', type: 'U1' },
+    0x209100ac: { name: 'CFG-MSGOUT-NMEA_ID_RMC_UART1', type: 'U1' },
+    0x209100c0: { name: 'CFG-MSGOUT-NMEA_ID_GSA_UART1', type: 'U1' },
+    0x209100c5: { name: 'CFG-MSGOUT-NMEA_ID_GSV_UART1', type: 'U1' },
+    0x209100b1: { name: 'CFG-MSGOUT-NMEA_ID_VTG_UART1', type: 'U1' },
+    0x209100ca: { name: 'CFG-MSGOUT-NMEA_ID_GLL_UART1', type: 'U1' },
+    0x209100d9: { name: 'CFG-MSGOUT-NMEA_ID_ZDA_UART1', type: 'U1' },
+    // MSGOUT USB (+2 offset from UART1)
+    0x20910009: { name: 'CFG-MSGOUT-UBX_NAV_PVT_USB', type: 'U1' },
+    0x20910018: { name: 'CFG-MSGOUT-UBX_NAV_SAT_USB', type: 'U1' },
+    0x20910348: { name: 'CFG-MSGOUT-UBX_NAV_SIG_USB', type: 'U1' },
+    0x2091003b: { name: 'CFG-MSGOUT-UBX_NAV_DOP_USB', type: 'U1' },
+    0x2091001d: { name: 'CFG-MSGOUT-UBX_NAV_STATUS_USB', type: 'U1' },
+    0x2091035c: { name: 'CFG-MSGOUT-UBX_MON_RF_USB', type: 'U1' },
+    0x2091038e: { name: 'CFG-MSGOUT-UBX_MON_SPAN_USB', type: 'U1' },
+    0x209100bd: { name: 'CFG-MSGOUT-NMEA_ID_GGA_USB', type: 'U1' },
+    0x209100ae: { name: 'CFG-MSGOUT-NMEA_ID_RMC_USB', type: 'U1' },
+    0x209100c2: { name: 'CFG-MSGOUT-NMEA_ID_GSA_USB', type: 'U1' },
+    0x209100c7: { name: 'CFG-MSGOUT-NMEA_ID_GSV_USB', type: 'U1' }
+  };
+
+  function keySizeBytes(keyId) {
+    const sizeBits = (keyId >>> 28) & 0x07;
+    if (sizeBits === 1 || sizeBits === 2) return 1;
+    if (sizeBits === 3) return 2;
+    if (sizeBits === 4) return 4;
+    if (sizeBits === 5) return 8;
+    return 1;
+  }
+
+  // =========================================================================
+  // 2. Application State
+  // =========================================================================
+  const state = {
+    connected: false,
+    baudrate: 38400,
+    dtr: false,
+    rts: false,
+    rxBytes: 0,
+    txBytes: 0,
+    msgCountWindow: 0,
+    msgRate: 0,
+    consolePaused: false,
+    skyTrails: false,
+    spanMaxHold: false,
+    visibleGnss: new Set([0, 1, 2, 3, 5, 6]),
+
+    // Latest navigation & telemetry state
+    nav: {
+      source: 'none',
+      hasFix: false,
+      fixType: 0,
+      flags: 0,
+      psmState: 0,
+      utcStr: '--',
+      iTOW: null,
+      lat: null,
+      lon: null,
+      heightM: null,
+      hMSL: null,
+      geoidSepM: null,
+      hAccM: null,
+      vAccM: null,
+      sAccMs: null,
+      headAccDeg: null,
+      velN: null,
+      velE: null,
+      velD: null,
+      gSpeedMs: null,
+      headMotDeg: null,
+      numSVUsed: 0,
+      numSVTracked: 0,
+      pDOP: null,
+      hDOP: null,
+      vDOP: null,
+      gDOP: null,
+      tDOP: null,
+      nDOP: null,
+      eDOP: null,
+      ttffMs: null,
+      msssMs: null
+    },
+    ver: { sw: '--', hw: '--', ext: [] },
+    sats: [],        // Merged/latest from NAV-SAT or NMEA GSV
+    sigs: [],        // From NAV-SIG
+    rfBlocks: [],    // From MON-RF
+    spanBlocks: [],  // From MON-SPAN
+    spanMaxBins: [], // Max-hold per RF block
+
+    // NMEA assembly buffers
+    nmeaGsvAccum: {},
+    nmeaUsedPrns: new Set(),
+
+    // History for deviation, map, sky trails, time series
+    devPoints: [],   // { lat, lon }
+    devRef: null,    // null = auto mean, or { lat, lon }
+    trackPoints: [], // { lat, lon }
+    tsHistory: [],   // { t, cn0Mean, cn0Max, hAcc, vAcc, pdop, hdop, svUsed, svTracked, alt, speed }
+    satTrails: new Map(), // "gnss:svId" -> [{elev, azim}]
+
+    // Map interaction
+    mapCenter: { lat: 25.0330, lon: 121.5654 },
+    mapZoom: 16,
+    mapFollow: true,
+    tileCache: new Map(),
+
+    // Console buffers
+    packets: [],      // Last 250 decoded packets
+    selectedPktIdx: -1,
+    nmeaLines: [],    // Last 300 lines
+    hexLines: [],     // Last 200 lines
+    valgetRows: []
+  };
+
+  // =========================================================================
+  // 3. UBX & NMEA Checksum / Frame Builders
+  // =========================================================================
+  function calcUbxChecksum(bytes) {
+    let ckA = 0, ckB = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      ckA = (ckA + bytes[i]) & 0xff;
+      ckB = (ckB + ckA) & 0xff;
+    }
+    return [ckA, ckB];
+  }
+
+  function buildUbxFrame(cls, id, payload = []) {
+    const len = payload.length;
+    const body = new Uint8Array(4 + len);
+    body[0] = cls & 0xff;
+    body[1] = id & 0xff;
+    body[2] = len & 0xff;
+    body[3] = (len >> 8) & 0xff;
+    for (let i = 0; i < len; i++) body[4 + i] = payload[i] & 0xff;
+    const [ckA, ckB] = calcUbxChecksum(body);
+    const frame = new Uint8Array(2 + body.length + 2);
+    frame[0] = 0xb5;
+    frame[1] = 0x62;
+    frame.set(body, 2);
+    frame[frame.length - 2] = ckA;
+    frame[frame.length - 1] = ckB;
+    return frame;
+  }
+
+  function buildNmeaSentence(body) {
+    let clean = body.trim();
+    if (clean.startsWith('$')) clean = clean.slice(1);
+    const starIdx = clean.indexOf('*');
+    if (starIdx >= 0) clean = clean.slice(0, starIdx);
+    let cs = 0;
+    for (let i = 0; i < clean.length; i++) cs ^= clean.charCodeAt(i) & 0xff;
+    return `$${clean}*${cs.toString(16).toUpperCase().padStart(2, '0')}\r\n`;
+  }
+
+  function encodeValset(layersMask, items) {
+    // items: [{ key: number, type: 'L'|'U1'|'I1'|'U2'|'I2'|'U4'|'I4'|'E1', value: number }]
+    const bytes = [0x00, layersMask & 0x07, 0x00, 0x00];
+    const tmp = new ArrayBuffer(8);
+    const dv = new DataView(tmp);
+    for (const it of items) {
+      const k = it.key >>> 0;
+      bytes.push(k & 0xff, (k >>> 8) & 0xff, (k >>> 16) & 0xff, (k >>> 24) & 0xff);
+      const sz = keySizeBytes(k);
+      if (sz === 1) {
+        if (it.type === 'I1') dv.setInt8(0, it.value);
+        else dv.setUint8(0, it.value);
+        bytes.push(dv.getUint8(0));
+      } else if (sz === 2) {
+        if (it.type === 'I2') dv.setInt16(0, it.value, true);
+        else dv.setUint16(0, it.value, true);
+        bytes.push(dv.getUint8(0), dv.getUint8(1));
+      } else if (sz === 4) {
+        if (it.type === 'I4') dv.setInt32(0, it.value, true);
+        else dv.setUint32(0, it.value, true);
+        bytes.push(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
+      }
+    }
+    return buildUbxFrame(0x06, 0x8a, bytes);
+  }
+
+  function encodeValget(layer, keys, position = 0) {
+    const bytes = [0x00, layer & 0xff, position & 0xff, (position >> 8) & 0xff];
+    for (const k of keys) {
+      const uk = k >>> 0;
+      bytes.push(uk & 0xff, (uk >>> 8) & 0xff, (uk >>> 16) & 0xff, (uk >>> 24) & 0xff);
+    }
+    return buildUbxFrame(0x06, 0x8b, bytes);
+  }
+
+  function encodeValdel(layersMask, keys) {
+    const bytes = [0x00, layersMask & 0x07, 0x00, 0x00];
+    for (const k of keys) {
+      const uk = k >>> 0;
+      bytes.push(uk & 0xff, (uk >>> 8) & 0xff, (uk >>> 16) & 0xff, (uk >>> 24) & 0xff);
+    }
+    return buildUbxFrame(0x06, 0x8c, bytes);
+  }
+
+  function encodeCfgRst(navBbrMask, resetMode) {
+    return buildUbxFrame(0x06, 0x04, [
+      navBbrMask & 0xff,
+      (navBbrMask >> 8) & 0xff,
+      resetMode & 0xff,
+      0x00
+    ]);
+  }
+
+  // =========================================================================
+  // 4. Interleaved NMEA + UBX Stream Parser
+  // =========================================================================
+  class GnssStreamParser {
+    constructor(onUbx, onNmea) {
+      this.onUbx = onUbx;
+      this.onNmea = onNmea;
+      this.reset();
+    }
+
+    reset() {
+      this.mode = 'idle'; // idle | ubx_hdr | ubx_len | ubx_pay | ubx_ck | nmea
+      this.ubxBuf = [];
+      this.ubxCls = 0;
+      this.ubxId = 0;
+      this.ubxLen = 0;
+      this.ubxPayload = null;
+      this.ubxPos = 0;
+      this.nmeaChars = [];
+    }
+
+    feed(chunk) {
+      for (let i = 0; i < chunk.length; i++) {
+        const b = chunk[i];
+        if (this.mode === 'idle') {
+          if (b === 0xb5) {
+            this.mode = 'ubx_sync2';
+          } else if (b === 0x24) { // '$'
+            this.mode = 'nmea';
+            this.nmeaChars = [0x24];
+          }
+        } else if (this.mode === 'ubx_sync2') {
+          if (b === 0x62) {
+            this.mode = 'ubx_hdr';
+            this.ubxBuf = [];
+          } else if (b === 0x24) {
+            this.mode = 'nmea';
+            this.nmeaChars = [0x24];
+          } else if (b !== 0xb5) {
+            this.mode = 'idle';
+          }
+        } else if (this.mode === 'ubx_hdr') {
+          this.ubxBuf.push(b);
+          if (this.ubxBuf.length === 4) {
+            this.ubxCls = this.ubxBuf[0];
+            this.ubxId = this.ubxBuf[1];
+            this.ubxLen = this.ubxBuf[2] | (this.ubxBuf[3] << 8);
+            if (this.ubxLen > 4096) {
+              this.mode = 'idle';
+            } else if (this.ubxLen === 0) {
+              this.ubxPayload = new Uint8Array(0);
+              this.mode = 'ubx_ck';
+              this.ubxPos = 0;
+            } else {
+              this.ubxPayload = new Uint8Array(this.ubxLen);
+              this.ubxPos = 0;
+              this.mode = 'ubx_pay';
+            }
+          }
+        } else if (this.mode === 'ubx_pay') {
+          this.ubxPayload[this.ubxPos++] = b;
+          if (this.ubxPos === this.ubxLen) {
+            this.mode = 'ubx_ck';
+            this.ubxPos = 0;
+          }
+        } else if (this.mode === 'ubx_ck') {
+          this.ubxBuf.push(b);
+          if (this.ubxBuf.length === 6) {
+            const rxCkA = this.ubxBuf[4];
+            const rxCkB = this.ubxBuf[5];
+            // Checksum covers cls, id, lenL, lenH + payload
+            let ckA = 0, ckB = 0;
+            for (let j = 0; j < 4; j++) {
+              ckA = (ckA + this.ubxBuf[j]) & 0xff;
+              ckB = (ckB + ckA) & 0xff;
+            }
+            for (let j = 0; j < this.ubxPayload.length; j++) {
+              ckA = (ckA + this.ubxPayload[j]) & 0xff;
+              ckB = (ckB + ckA) & 0xff;
+            }
+            if (ckA === rxCkA && ckB === rxCkB) {
+              this.onUbx(this.ubxCls, this.ubxId, this.ubxPayload, rxCkA, rxCkB);
+            }
+            this.mode = 'idle';
+          }
+        } else if (this.mode === 'nmea') {
+          if (b === 0x0a) { // '\n'
+            const str = String.fromCharCode(...this.nmeaChars).replace(/\r$/, '');
+            if (verifyNmeaChecksum(str)) {
+              this.onNmea(str);
+            }
+            this.mode = 'idle';
+          } else if (b === 0xb5) {
+            // Interrupted by UBX frame
+            this.mode = 'ubx_sync2';
+          } else if (this.nmeaChars.length < 120) {
+            this.nmeaChars.push(b);
+          } else {
+            this.mode = 'idle';
+          }
+        }
+      }
+    }
+  }
+
+  function verifyNmeaChecksum(sentence) {
+    if (!sentence.startsWith('$')) return false;
+    const star = sentence.indexOf('*');
+    if (star < 2 || star + 3 > sentence.length) return false;
+    let cs = 0;
+    for (let i = 1; i < star; i++) cs ^= sentence.charCodeAt(i) & 0xff;
+    const expected = parseInt(sentence.slice(star + 1, star + 3), 16);
+    return !Number.isNaN(expected) && cs === expected;
+  }
+
+  // =========================================================================
+  // 5. UBX Message Decoders
+  // =========================================================================
+  function readAscii(dv, offset, len) {
+    let s = '';
+    for (let i = 0; i < len && offset + i < dv.byteLength; i++) {
+      const ch = dv.getUint8(offset + i);
+      if (ch === 0) break;
+      if (ch >= 32 && ch < 127) s += String.fromCharCode(ch);
+    }
+    return s.trim();
+  }
+
+  function decodeUbx(cls, id, payload) {
+    const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    const key = `${cls.toString(16).padStart(2, '0')}:${id.toString(16).padStart(2, '0')}`;
+    const name = UBX_MSG_NAMES[key] || `UBX-${key.toUpperCase()}`;
+    const decoded = {};
+    let summary = `${payload.length} B`;
+
+    if (cls === 0x05 && payload.length >= 2) {
+      const ackCls = dv.getUint8(0);
+      const ackId = dv.getUint8(1);
+      const targetKey = `${ackCls.toString(16).padStart(2, '0')}:${ackId.toString(16).padStart(2, '0')}`;
+      const targetName = UBX_MSG_NAMES[targetKey] || targetKey.toUpperCase();
+      const ok = id === 0x01;
+      decoded.clsID = `0x${ackCls.toString(16).padStart(2, '0')}`;
+      decoded.msgID = `0x${ackId.toString(16).padStart(2, '0')}`;
+      decoded.target = targetName;
+      summary = `${ok ? 'ACK' : 'NAK'} -> ${targetName}`;
+      setAckBanner(ok, `${ok ? 'ACK-ACK' : 'ACK-NAK'}: ${targetName}`);
+    } else if (cls === 0x01 && id === 0x07 && payload.length >= 92) {
+      // UBX-NAV-PVT
+      const iTOW = dv.getUint32(0, true);
+      const year = dv.getUint16(4, true);
+      const month = dv.getUint8(6);
+      const day = dv.getUint8(7);
+      const hour = dv.getUint8(8);
+      const min = dv.getUint8(9);
+      const sec = dv.getUint8(10);
+      const valid = dv.getUint8(11);
+      const fixType = dv.getUint8(20);
+      const flags = dv.getUint8(21);
+      const numSV = dv.getUint8(23);
+      const lon = dv.getInt32(24, true) * 1e-7;
+      const lat = dv.getInt32(28, true) * 1e-7;
+      const heightM = dv.getInt32(32, true) / 1000;
+      const hMSL = dv.getInt32(36, true) / 1000;
+      const hAccM = dv.getUint32(40, true) / 1000;
+      const vAccM = dv.getUint32(44, true) / 1000;
+      const velN = dv.getInt32(48, true) / 1000;
+      const velE = dv.getInt32(52, true) / 1000;
+      const velD = dv.getInt32(56, true) / 1000;
+      const gSpeedMs = dv.getInt32(60, true) / 1000;
+      const headMotDeg = dv.getInt32(64, true) * 1e-5;
+      const sAccMs = dv.getUint32(68, true) / 1000;
+      const headAccDeg = dv.getUint32(72, true) * 1e-5;
+      const pDOP = dv.getUint16(76, true) * 0.01;
+
+      const gnssFixOK = (flags & 0x01) !== 0;
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const utcStr = `${year}-${pad2(month)}-${pad2(day)} ${pad2(hour)}:${pad2(min)}:${pad2(sec)}`;
+
+      Object.assign(state.nav, {
+        source: 'UBX',
+        hasFix: gnssFixOK && fixType >= 2,
+        fixType,
+        flags,
+        psmState: (flags >> 2) & 0x07,
+        utcStr,
+        iTOW,
+        lat,
+        lon,
+        heightM,
+        hMSL,
+        geoidSepM: heightM - hMSL,
+        hAccM,
+        vAccM,
+        velN,
+        velE,
+        velD,
+        gSpeedMs,
+        headMotDeg,
+        sAccMs,
+        headAccDeg,
+        numSVUsed: numSV,
+        pDOP
+      });
+
+      if (state.nav.hasFix) {
+        recordPositionSample(lat, lon, hMSL, gSpeedMs);
+      }
+      pushTimeSeriesEpoch();
+
+      Object.assign(decoded, {
+        iTOW, utcStr, fixType: FIX_TYPES[fixType] || fixType, gnssFixOK,
+        numSV, lat: +lat.toFixed(7), lon: +lon.toFixed(7), hMSL: +hMSL.toFixed(3),
+        hAccM: +hAccM.toFixed(3), vAccM: +vAccM.toFixed(3), gSpeedMs: +gSpeedMs.toFixed(2), pDOP: +pDOP.toFixed(2)
+      });
+      summary = `${FIX_TYPES[fixType] || fixType} SVs=${numSV} hAcc=${hAccM.toFixed(2)}m`;
+    } else if (cls === 0x01 && id === 0x35 && payload.length >= 8) {
+      // UBX-NAV-SAT
+      const iTOW = dv.getUint32(0, true);
+      const numSvs = dv.getUint8(5);
+      const list = [];
+      let usedCount = 0;
+      for (let i = 0; i < numSvs && 8 + (i + 1) * 12 <= payload.length; i++) {
+        const off = 8 + i * 12;
+        const gnssId = dv.getUint8(off);
+        const svId = dv.getUint8(off + 1);
+        const cno = dv.getUint8(off + 2);
+        const elev = dv.getInt8(off + 3);
+        const azim = dv.getInt16(off + 4, true);
+        const prRes = dv.getInt16(off + 6, true) * 0.1;
+        const flags = dv.getUint32(off + 8, true);
+        const qualityInd = flags & 0x07;
+        const svUsed = (flags & 0x08) !== 0;
+        const health = (flags >> 4) & 0x03;
+        if (svUsed) usedCount++;
+        list.push({ gnssId, svId, cno, elev, azim, prRes, qualityInd, svUsed, health, source: 'UBX' });
+
+        if (elev >= 0 && elev <= 90 && azim >= 0 && azim <= 360) {
+          const tk = `${gnssId}:${svId}`;
+          let tr = state.satTrails.get(tk);
+          if (!tr) { tr = []; state.satTrails.set(tk, tr); }
+          const last = tr[tr.length - 1];
+          if (!last || Math.abs(last.elev - elev) >= 0.5 || Math.abs(last.azim - azim) >= 0.5) {
+            tr.push({ elev, azim });
+            if (tr.length > 180) tr.shift();
+          }
+        }
+      }
+      state.sats = list;
+      state.nav.numSVTracked = list.length;
+      if (!state.nav.numSVUsed) state.nav.numSVUsed = usedCount;
+      decoded.iTOW = iTOW;
+      decoded.numSvs = numSvs;
+      decoded.used = usedCount;
+      summary = `${numSvs} SVs (${usedCount} used)`;
+    } else if (cls === 0x01 && id === 0x43 && payload.length >= 8) {
+      // UBX-NAV-SIG
+      const iTOW = dv.getUint32(0, true);
+      const numSigs = dv.getUint8(5);
+      const list = [];
+      for (let i = 0; i < numSigs && 8 + (i + 1) * 16 <= payload.length; i++) {
+        const off = 8 + i * 16;
+        const gnssId = dv.getUint8(off);
+        const svId = dv.getUint8(off + 1);
+        const sigId = dv.getUint8(off + 2);
+        const freqId = dv.getUint8(off + 3);
+        const prRes = dv.getInt16(off + 4, true) * 0.1;
+        const cno = dv.getUint8(off + 6);
+        const qualityInd = dv.getUint8(off + 7);
+        const sigFlags = dv.getUint16(off + 8, true);
+        const prUsed = (sigFlags & 0x08) !== 0;
+        const crUsed = (sigFlags & 0x10) !== 0;
+        const doUsed = (sigFlags & 0x20) !== 0;
+        const sigLabel = (SIG_NAMES[gnssId] && SIG_NAMES[gnssId][sigId]) || `S${sigId}`;
+        list.push({ gnssId, svId, sigId, sigLabel, freqId, prRes, cno, qualityInd, prUsed, crUsed, doUsed });
+      }
+      state.sigs = list;
+      decoded.iTOW = iTOW;
+      decoded.numSigs = numSigs;
+      summary = `${numSigs} signals`;
+    } else if (cls === 0x01 && id === 0x04 && payload.length >= 18) {
+      // UBX-NAV-DOP
+      state.nav.gDOP = dv.getUint16(4, true) * 0.01;
+      state.nav.pDOP = dv.getUint16(6, true) * 0.01;
+      state.nav.tDOP = dv.getUint16(8, true) * 0.01;
+      state.nav.vDOP = dv.getUint16(10, true) * 0.01;
+      state.nav.hDOP = dv.getUint16(12, true) * 0.01;
+      state.nav.nDOP = dv.getUint16(14, true) * 0.01;
+      state.nav.eDOP = dv.getUint16(16, true) * 0.01;
+      Object.assign(decoded, {
+        gDOP: +state.nav.gDOP.toFixed(2),
+        pDOP: +state.nav.pDOP.toFixed(2),
+        hDOP: +state.nav.hDOP.toFixed(2),
+        vDOP: +state.nav.vDOP.toFixed(2)
+      });
+      summary = `PDOP=${state.nav.pDOP.toFixed(2)} HDOP=${state.nav.hDOP.toFixed(2)}`;
+    } else if (cls === 0x01 && id === 0x03 && payload.length >= 16) {
+      // UBX-NAV-STATUS
+      state.nav.ttffMs = dv.getUint32(8, true);
+      state.nav.msssMs = dv.getUint32(12, true);
+      decoded.gpsFix = FIX_TYPES[dv.getUint8(4)] || dv.getUint8(4);
+      decoded.ttffMs = state.nav.ttffMs;
+      decoded.msssMs = state.nav.msssMs;
+      summary = `TTFF=${(state.nav.ttffMs / 1000).toFixed(2)}s Up=${(state.nav.msssMs / 1000).toFixed(0)}s`;
+    } else if (cls === 0x0a && id === 0x04 && payload.length >= 40) {
+      // UBX-MON-VER
+      const sw = readAscii(dv, 0, 30);
+      const hw = readAscii(dv, 30, 10);
+      const ext = [];
+      for (let off = 40; off + 30 <= payload.length; off += 30) {
+        const s = readAscii(dv, off, 30);
+        if (s) ext.push(s);
+      }
+      state.ver = { sw, hw, ext };
+      decoded.swVersion = sw;
+      decoded.hwVersion = hw;
+      decoded.extensions = ext;
+      summary = `${sw} (${hw})`;
+    } else if (cls === 0x0a && id === 0x38 && payload.length >= 4) {
+      // UBX-MON-RF
+      const nBlocks = dv.getUint8(1);
+      const blocks = [];
+      for (let i = 0; i < nBlocks && 4 + (i + 1) * 24 <= payload.length; i++) {
+        const off = 4 + i * 24;
+        const blockId = dv.getUint8(off);
+        const flags = dv.getUint8(off + 1);
+        const antStatus = dv.getUint8(off + 2);
+        const antPower = dv.getUint8(off + 3);
+        const noisePerMS = dv.getUint16(off + 12, true);
+        const agcCnt = dv.getUint16(off + 14, true);
+        const jamInd = dv.getUint8(off + 16);
+        const ofsI = dv.getInt8(off + 17);
+        const magI = dv.getUint8(off + 18);
+        const ofsQ = dv.getInt8(off + 19);
+        const magQ = dv.getUint8(off + 20);
+        blocks.push({
+          blockId,
+          jammingState: flags & 0x03,
+          antStatus,
+          antPower,
+          noisePerMS,
+          agcCnt,
+          jamInd,
+          ofsI, magI, ofsQ, magQ
+        });
+      }
+      state.rfBlocks = blocks;
+      renderRfBlocks();
+      decoded.nBlocks = nBlocks;
+      decoded.blocks = blocks;
+      summary = blocks.length ? `Blk0 jam=${blocks[0].jamInd} agc=${blocks[0].agcCnt}` : `${nBlocks} blocks`;
+    } else if (cls === 0x0a && id === 0x31 && payload.length >= 4) {
+      // UBX-MON-SPAN
+      const numRfBlocks = dv.getUint8(1);
+      const blocks = [];
+      for (let i = 0; i < numRfBlocks && 4 + (i + 1) * 272 <= payload.length; i++) {
+        const off = 4 + i * 272;
+        const spectrum = payload.slice(off, off + 256);
+        const span = dv.getUint32(off + 256, true);
+        const res = dv.getUint32(off + 260, true);
+        const center = dv.getUint32(off + 264, true);
+        const pga = dv.getUint8(off + 268);
+        blocks.push({ spectrum, span, res, center, pga });
+        if (!state.spanMaxBins[i] || state.spanMaxBins[i].length !== 256) {
+          state.spanMaxBins[i] = new Uint8Array(spectrum);
+        } else {
+          for (let k = 0; k < 256; k++) {
+            if (spectrum[k] > state.spanMaxBins[i][k]) state.spanMaxBins[i][k] = spectrum[k];
+          }
+        }
+      }
+      state.spanBlocks = blocks;
+      decoded.numRfBlocks = numRfBlocks;
+      if (blocks[0]) {
+        decoded.centerMHz = (blocks[0].center / 1e6).toFixed(3);
+        decoded.spanMHz = (blocks[0].span / 1e6).toFixed(3);
+        decoded.pgaDb = blocks[0].pga;
+        summary = `Center ${(blocks[0].center / 1e6).toFixed(2)} MHz Span ${(blocks[0].span / 1e6).toFixed(1)} MHz PGA ${blocks[0].pga} dB`;
+      }
+    } else if (cls === 0x06 && id === 0x8b && payload.length >= 4) {
+      // UBX-CFG-VALGET response
+      const layer = dv.getUint8(1);
+      const layerName = ['RAM', 'BBR', 'Flash', '', '', '', '', 'Default'][layer] || `L${layer}`;
+      let off = 4;
+      const items = [];
+      while (off + 4 <= payload.length) {
+        const keyId = dv.getUint32(off, true);
+        off += 4;
+        const sz = keySizeBytes(keyId);
+        if (off + sz > payload.length) break;
+        let val = 0;
+        let rawHex = '';
+        for (let i = 0; i < sz; i++) {
+          rawHex += payload[off + i].toString(16).padStart(2, '0');
+        }
+        const meta = M10_KEYS[keyId];
+        const isSigned = meta && (meta.type === 'I1' || meta.type === 'I2' || meta.type === 'I4');
+        if (sz === 1) val = isSigned ? dv.getInt8(off) : dv.getUint8(off);
+        else if (sz === 2) val = isSigned ? dv.getInt16(off, true) : dv.getUint16(off, true);
+        else if (sz === 4) val = isSigned ? dv.getInt32(off, true) : dv.getUint32(off, true);
+        else if (sz === 8) val = Number(dv.getBigUint64(off, true));
+        off += sz;
+        items.push({
+          keyHex: '0x' + keyId.toString(16).padStart(8, '0'),
+          keyId,
+          name: meta ? meta.name : 'UNKNOWN',
+          layer: layerName,
+          rawHex: '0x' + rawHex,
+          val
+        });
+        syncCfgControlFromValget(keyId, val);
+      }
+      state.valgetRows = [...items, ...state.valgetRows].slice(0, 60);
+      renderValgetTable();
+      decoded.layer = layerName;
+      decoded.items = items;
+      summary = `${layerName}: ${items.length} key(s)`;
+    }
+
+    pushPacket('UBX', name, payload.length, summary, decoded, payload);
+  }
+
+  // =========================================================================
+  // 6. NMEA 0183 Decoder
+  // =========================================================================
+  function nmeaCoordToDeg(valStr, hemi) {
+    if (!valStr) return null;
+    const dot = valStr.indexOf('.');
+    if (dot < 2) return null;
+    const degLen = dot - 2;
+    const deg = parseFloat(valStr.slice(0, degLen));
+    const min = parseFloat(valStr.slice(degLen));
+    let res = deg + min / 60;
+    if (hemi === 'S' || hemi === 'W') res = -res;
+    return res;
+  }
+
+  function talkerToGnssId(talker) {
+    switch (talker) {
+      case 'GP': return 0;
+      case 'GA': return 2;
+      case 'GB':
+      case 'BD': return 3;
+      case 'GQ':
+      case 'QZ': return 5;
+      case 'GL': return 6;
+      default: return 0;
+    }
+  }
+
+  function decodeNmea(line) {
+    const star = line.indexOf('*');
+    const body = star > 0 ? line.slice(1, star) : line.slice(1);
+    const f = body.split(',');
+    const head = f[0] || '';
+    const talker = head.slice(0, 2);
+    const type = head.slice(2);
+    const ubxActive = state.nav.source === 'UBX';
+
+    if (type === 'GGA' && f.length >= 14) {
+      const qual = parseInt(f[6] || '0', 10);
+      const lat = nmeaCoordToDeg(f[2], f[3]);
+      const lon = nmeaCoordToDeg(f[4], f[5]);
+      const numSV = parseInt(f[7] || '0', 10);
+      const hdop = parseFloat(f[8]);
+      const alt = parseFloat(f[9]);
+      const geoid = parseFloat(f[11]);
+
+      if (!ubxActive) {
+        if (f[1] && f[1].length >= 6) {
+          const t = f[1];
+          const timePart = `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}`;
+          state.nav.utcStr = state.nav.utcStr.includes('-') ? `${state.nav.utcStr.split(' ')[0]} ${timePart}` : timePart;
+        }
+        state.nav.hasFix = qual > 0 && lat !== null && lon !== null;
+        if (qual > 0 && state.nav.fixType < 2) state.nav.fixType = 3;
+        if (qual === 0) state.nav.fixType = 0;
+        if (lat !== null && lon !== null) {
+          state.nav.lat = lat;
+          state.nav.lon = lon;
+        }
+        if (!Number.isNaN(alt)) state.nav.hMSL = alt;
+        if (!Number.isNaN(geoid)) {
+          state.nav.geoidSepM = geoid;
+          if (!Number.isNaN(alt)) state.nav.heightM = alt + geoid;
+        }
+        if (!Number.isNaN(hdop)) state.nav.hDOP = hdop;
+        state.nav.numSVUsed = numSV;
+        if (state.nav.hasFix && lat !== null && lon !== null) {
+          recordPositionSample(lat, lon, state.nav.hMSL || 0, state.nav.gSpeedMs || 0);
+        }
+        pushTimeSeriesEpoch();
+      }
+      pushPacket('NMEA', head, line.length, `FixQ=${qual} SVs=${numSV} HDOP=${f[8] || '--'}`, { raw: line });
+    } else if (type === 'RMC' && f.length >= 10) {
+      const status = f[2];
+      const lat = nmeaCoordToDeg(f[3], f[4]);
+      const lon = nmeaCoordToDeg(f[5], f[6]);
+      const spdKn = parseFloat(f[7]);
+      const cog = parseFloat(f[8]);
+      if (!ubxActive) {
+        if (f[9] && f[9].length === 6 && f[1] && f[1].length >= 6) {
+          const d = f[9], t = f[1];
+          state.nav.utcStr = `20${d.slice(4, 6)}-${d.slice(2, 4)}-${d.slice(0, 2)} ${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}`;
+        }
+        if (status === 'A' && lat !== null && lon !== null) {
+          state.nav.lat = lat;
+          state.nav.lon = lon;
+          state.nav.hasFix = true;
+        }
+        if (!Number.isNaN(spdKn)) state.nav.gSpeedMs = spdKn * 0.514444;
+        if (!Number.isNaN(cog)) state.nav.headMotDeg = cog;
+      }
+      pushPacket('NMEA', head, line.length, `Status=${status} Spd=${f[7] || '0'}kn`, { raw: line });
+    } else if (type === 'GSA' && f.length >= 18) {
+      const modeFix = parseInt(f[2] || '1', 10);
+      const pdop = parseFloat(f[15]);
+      const hdop = parseFloat(f[16]);
+      const vdop = parseFloat(f[17]);
+      const sysId = f.length > 18 ? parseInt(f[18], 10) : null;
+      const gnssId = sysId === 1 ? 0 : sysId === 2 ? 6 : sysId === 3 ? 2 : sysId === 4 ? 3 : sysId === 5 ? 5 : talkerToGnssId(talker);
+      for (let i = 3; i <= 14; i++) {
+        if (f[i]) state.nmeaUsedPrns.add(`${gnssId}:${parseInt(f[i], 10)}`);
+      }
+      if (!ubxActive) {
+        state.nav.fixType = modeFix === 3 ? 3 : modeFix === 2 ? 2 : 0;
+        if (!Number.isNaN(pdop)) state.nav.pDOP = pdop;
+        if (!Number.isNaN(hdop)) state.nav.hDOP = hdop;
+        if (!Number.isNaN(vdop)) state.nav.vDOP = vdop;
+      }
+      pushPacket('NMEA', head, line.length, `Mode=${modeFix}D PDOP=${f[15] || '--'}`, { raw: line });
+    } else if (type === 'GSV' && f.length >= 4) {
+      const totalMsgs = parseInt(f[1] || '1', 10);
+      const msgNum = parseInt(f[2] || '1', 10);
+      const gnssId = talkerToGnssId(talker);
+      if (msgNum === 1) state.nmeaGsvAccum[gnssId] = [];
+      const arr = state.nmeaGsvAccum[gnssId] || (state.nmeaGsvAccum[gnssId] = []);
+      const hasSigId = (f.length - 4) % 4 === 1;
+      const limit = hasSigId ? f.length - 1 : f.length;
+      for (let i = 4; i + 3 < limit; i += 4) {
+        const svId = parseInt(f[i], 10);
+        const elev = parseInt(f[i + 1], 10);
+        const azim = parseInt(f[i + 2], 10);
+        const cno = parseInt(f[i + 3] || '0', 10);
+        if (!Number.isNaN(svId)) {
+          arr.push({
+            gnssId,
+            svId,
+            elev: Number.isNaN(elev) ? -1 : elev,
+            azim: Number.isNaN(azim) ? 0 : azim,
+            cno: Number.isNaN(cno) ? 0 : cno,
+            svUsed: state.nmeaUsedPrns.has(`${gnssId}:${svId}`),
+            qualityInd: cno > 0 ? 4 : 1,
+            source: 'NMEA'
+          });
+        }
+      }
+      if (msgNum === totalMsgs && !state.sats.some(s => s.source === 'UBX')) {
+        const merged = [];
+        for (const k of Object.keys(state.nmeaGsvAccum)) {
+          merged.push(...state.nmeaGsvAccum[k]);
+        }
+        state.sats = merged;
+        state.nav.numSVTracked = merged.length;
+      }
+      pushPacket('NMEA', head, line.length, `${msgNum}/${totalMsgs} TotalSV=${f[3] || 0}`, { raw: line });
+    } else if (type === 'GST' && f.length >= 9 && !ubxActive) {
+      const latErr = parseFloat(f[6]);
+      const lonErr = parseFloat(f[7]);
+      const altErr = parseFloat(f[8]);
+      if (!Number.isNaN(latErr) && !Number.isNaN(lonErr)) {
+        state.nav.hAccM = Math.hypot(latErr, lonErr);
+      }
+      if (!Number.isNaN(altErr)) state.nav.vAccM = altErr;
+      pushPacket('NMEA', head, line.length, `LatErr=${f[6]} LonErr=${f[7]}`, { raw: line });
+    } else {
+      pushPacket('NMEA', head, line.length, f.slice(1, 5).join(','), { raw: line });
+    }
+  }
+
+  // =========================================================================
+  // 7. History & Telemetry Aggregation
+  // =========================================================================
+  function recordPositionSample(lat, lon, alt, speed) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001) return;
+    state.devPoints.push({ lat, lon });
+    if (state.devPoints.length > 2000) state.devPoints.shift();
+
+    const last = state.trackPoints[state.trackPoints.length - 1];
+    if (!last || Math.abs(last.lat - lat) > 1e-7 || Math.abs(last.lon - lon) > 1e-7) {
+      state.trackPoints.push({ lat, lon });
+      if (state.trackPoints.length > 1500) state.trackPoints.shift();
+    }
+    if (state.mapFollow) {
+      state.mapCenter = { lat, lon };
+    }
+  }
+
+  function pushTimeSeriesEpoch() {
+    const activeBars = state.sigs.length ? state.sigs : state.sats;
+    const validCno = activeBars.map(x => x.cno).filter(c => c > 0);
+    const cn0Mean = validCno.length ? validCno.reduce((a, b) => a + b, 0) / validCno.length : 0;
+    const cn0Max = validCno.length ? Math.max(...validCno) : 0;
+
+    state.tsHistory.push({
+      t: Date.now(),
+      cn0Mean,
+      cn0Max,
+      hAcc: state.nav.hAccM ?? 0,
+      vAcc: state.nav.vAccM ?? 0,
+      pdop: state.nav.pDOP ?? 0,
+      hdop: state.nav.hDOP ?? 0,
+      svUsed: state.nav.numSVUsed ?? 0,
+      svTracked: state.nav.numSVTracked ?? 0,
+      alt: state.nav.hMSL ?? 0,
+      speed: state.nav.gSpeedMs ?? 0
+    });
+    if (state.tsHistory.length > 240) state.tsHistory.shift();
+  }
+
+  // =========================================================================
+  // 8. Web Serial Transport & Autobaud
+  // =========================================================================
+  let port = null;
+  let reader = null;
+  let readLoopPromise = null;
+  let closingPort = false;
+  let autobaudActive = false;
+  let validFramesInProbe = 0;
+
+  const streamParser = new GnssStreamParser(
+    (cls, id, payload) => {
+      validFramesInProbe++;
+      state.msgCountWindow++;
+      decodeUbx(cls, id, payload);
+      scheduleRedraw();
+    },
+    (line) => {
+      validFramesInProbe++;
+      state.msgCountWindow++;
+      logNmeaLine(line, false);
+      decodeNmea(line);
+      scheduleRedraw();
+    }
+  );
+
+  function getSelectedBaudrate() {
+    const sel = document.getElementById('selBaud').value;
+    if (sel === 'custom') {
+      const v = parseInt(document.getElementById('inpCustomBaud').value, 10);
+      return Number.isFinite(v) && v >= 1200 ? v : 38400;
+    }
+    return parseInt(sel, 10);
+  }
+
+  async function openSerialPort(baud) {
+    await port.open({
+      baudRate: baud,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      bufferSize: 16384
+    });
+    state.connected = true;
+    state.baudrate = baud;
+    streamParser.reset();
+    startReadLoop();
+    updateConnectionUI();
+  }
+
+  async function closeSerialPort(keepPortRef = false) {
+    closingPort = true;
+    try {
+      if (reader) {
+        await reader.cancel().catch(() => {});
+      }
+      if (readLoopPromise) await readLoopPromise.catch(() => {});
+      if (port) await port.close().catch(() => {});
+    } finally {
+      closingPort = false;
+      reader = null;
+      readLoopPromise = null;
+      if (!keepPortRef) port = null;
+      state.connected = false;
+      updateConnectionUI();
+    }
+  }
+
+  function startReadLoop() {
+    readLoopPromise = (async () => {
+      while (port && port.readable && !closingPort) {
+        reader = port.readable.getReader();
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value && value.length) {
+              state.rxBytes += value.length;
+              logHexChunk(value, 'RX');
+              streamParser.feed(value);
+            }
+          }
+        } catch (err) {
+          if (!closingPort) {
+            console.warn('Serial read error:', err);
+            setAckBanner(false, `Read error: ${err.message}`);
+          }
+        } finally {
+          if (reader) {
+            reader.releaseLock();
+            reader = null;
+          }
+        }
+      }
+    })();
+  }
+
+  async function writeSerial(bytes) {
+    if (!port || !port.writable) return false;
+    const writer = port.writable.getWriter();
+    try {
+      await writer.write(bytes);
+      state.txBytes += bytes.length;
+      logHexChunk(bytes, 'TX');
+      return true;
+    } catch (err) {
+      setAckBanner(false, `TX error: ${err.message}`);
+      return false;
+    } finally {
+      writer.releaseLock();
+    }
+  }
+
+  async function runAutobaud() {
+    if (!port || autobaudActive) return;
+    autobaudActive = true;
+    const candidates = [38400, 9600, 115200, 230400, 460800, 57600, 19200, 4800, 921600];
+    setAckBanner(true, 'Autobaud scanning...');
+    try {
+      for (const b of candidates) {
+        if (!port) break;
+        document.getElementById('sbPort').textContent = `Scanning ${b}...`;
+        await closeSerialPort(true);
+        validFramesInProbe = 0;
+        await openSerialPort(b);
+        await new Promise(r => setTimeout(r, 750));
+        if (validFramesInProbe >= 2) {
+          const sel = document.getElementById('selBaud');
+          if ([...sel.options].some(o => o.value === String(b))) {
+            sel.value = String(b);
+            document.getElementById('inpCustomBaud').style.display = 'none';
+          }
+          setAckBanner(true, `Autobaud locked: ${b} bps`);
+          return;
+        }
+      }
+      setAckBanner(false, 'Autobaud: no valid NMEA/UBX frames detected');
+    } finally {
+      autobaudActive = false;
+      updateConnectionUI();
+    }
+  }
+
+  // =========================================================================
+  // 9. Console & Packet Log Helpers
+  // =========================================================================
+  function fmtTimeNow() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  }
+
+  function pushPacket(proto, msg, len, summary, decoded, rawBytes = null) {
+    if (state.consolePaused) return;
+    state.packets.unshift({
+      time: fmtTimeNow(),
+      proto,
+      msg,
+      len,
+      summary,
+      decoded,
+      rawHex: rawBytes ? [...rawBytes].map(b => b.toString(16).padStart(2, '0')).join(' ') : ''
+    });
+    if (state.packets.length > 200) state.packets.pop();
+    renderPacketList();
+  }
+
+  function logNmeaLine(line, isTx) {
+    if (state.consolePaused) return;
+    state.nmeaLines.push({ t: fmtTimeNow(), line, isTx });
+    if (state.nmeaLines.length > 250) state.nmeaLines.shift();
+    const el = document.getElementById('conText');
+    if (el.style.display !== 'none') {
+      renderTextConsole();
+    }
+  }
+
+  function logHexChunk(bytes, dir) {
+    if (state.consolePaused) return;
+    const hex = [...bytes].slice(0, 48).map(b => b.toString(16).padStart(2, '0')).join(' ') + (bytes.length > 48 ? ' ...' : '');
+    const ascii = [...bytes].slice(0, 48).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+    state.hexLines.push(`[${fmtTimeNow()}] ${dir} (${bytes.length}B): ${hex}  |${ascii}|`);
+    if (state.hexLines.length > 180) state.hexLines.shift();
+    const el = document.getElementById('conHex');
+    if (el.style.display !== 'none') {
+      renderHexConsole();
+    }
+  }
+
+  function setAckBanner(ok, msg) {
+    const el = document.getElementById('sbAck');
+    el.textContent = msg;
+    el.className = 'ack-toast ' + (ok ? 'ok' : 'err');
+  }
+
+  // =========================================================================
+  // 10. HiDPI Canvas Helpers & Visualizations
+  // =========================================================================
+  function fitCanvas(canvas) {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(100, Math.floor(rect.width));
+    const h = Math.max(100, Math.floor(rect.height));
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  let skyMarkers = [];
+  function renderSkyview() {
+    const cv = document.getElementById('cvSky');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const R = Math.min(w, h) * 0.41;
+
+    // Background rings
+    ctx.strokeStyle = '#283344';
+    ctx.lineWidth = 1;
+    [1, 2 / 3, 1 / 3].forEach((f, idx) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * f, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#5c6c82';
+      ctx.font = '10px monospace';
+      ctx.fillText(`${idx * 30}°`, cx + 4, cy - R * f + 11);
+    });
+
+    // Crosshairs & ticks
+    for (let deg = 0; deg < 360; deg += 30) {
+      const rad = (deg - 90) * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(rad) * (deg % 90 === 0 ? 0 : R * 0.92), cy + Math.sin(rad) * (deg % 90 === 0 ? 0 : R * 0.92));
+      ctx.lineTo(cx + Math.cos(rad) * R, cy + Math.sin(rad) * R);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#8b9bb0';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', cx, cy - R - 11);
+    ctx.fillText('S', cx, cy + R + 11);
+    ctx.fillText('E', cx + R + 11, cy);
+    ctx.fillText('W', cx - R - 11, cy);
+
+    // Optional satellite sky trails
+    if (state.skyTrails) {
+      for (const [tk, pts] of state.satTrails.entries()) {
+        const gnssId = parseInt(tk.split(':')[0], 10);
+        if (!state.visibleGnss.has(gnssId) || pts.length < 2) continue;
+        ctx.strokeStyle = (GNSS_COLORS[gnssId] || '#94a3b8') + '66';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        pts.forEach((p, idx) => {
+          const r = R * (1 - p.elev / 90);
+          const a = (p.azim - 90) * Math.PI / 180;
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+      }
+    }
+
+    // Satellites
+    skyMarkers = [];
+    for (const s of state.sats) {
+      if (!state.visibleGnss.has(s.gnssId)) continue;
+      if (s.elev < 0 || s.elev > 90) continue;
+      const r = R * (1 - s.elev / 90);
+      const rad = (s.azim - 90) * Math.PI / 180;
+      const x = cx + Math.cos(rad) * r;
+      const y = cy + Math.sin(rad) * r;
+      const color = GNSS_COLORS[s.gnssId] || '#94a3b8';
+      const label = (GNSS_PREFIX[s.gnssId] || '?') + String(s.svId).padStart(2, '0');
+
+      ctx.beginPath();
+      ctx.arc(x, y, s.svUsed ? 9 : 7, 0, Math.PI * 2);
+      if (s.svUsed) {
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#071018';
+      } else {
+        ctx.fillStyle = '#151c26';
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = color;
+      }
+
+      ctx.font = 'bold 9.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x, y + 0.5);
+
+      skyMarkers.push({ x, y, r: 10, sat: s, label });
+    }
+  }
+
+  let cn0Bars = [];
+  function renderCn0Chart() {
+    const cv = document.getElementById('cvCn0');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+
+    // Prefer NAV-SIG for multi-band detail, fallback to NAV-SAT/GSV
+    const useSigs = state.sigs.length > 0;
+    document.getElementById('cn0SourceTag').textContent = useSigs ? 'NAV-SIG' : 'NAV-SAT / GSV';
+    const rawItems = useSigs ? state.sigs : state.sats;
+    const items = rawItems
+      .filter(it => state.visibleGnss.has(it.gnssId) && it.cno > 0)
+      .sort((a, b) => a.gnssId - b.gnssId || a.svId - b.svId);
+
+    const usedCnos = items.filter(it => useSigs ? it.prUsed : it.svUsed).map(it => it.cno);
+    const meanCno = usedCnos.length ? (usedCnos.reduce((a, b) => a + b, 0) / usedCnos.length).toFixed(1) : '--';
+    document.getElementById('cn0Summary').textContent = `Mean Used: ${meanCno} dBHz (${items.length} sigs)`;
+
+    const padL = 30, padR = 10, padT = 16, padB = 34;
+    const plotW = Math.max(40, w - padL - padR);
+    const plotH = Math.max(40, h - padT - padB);
+    const maxDb = 60;
+
+    // Gridlines 10..50 dBHz
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let db = 10; db <= 50; db += 10) {
+      const y = padT + plotH * (1 - db / maxDb);
+      ctx.strokeStyle = db === 30 ? 'rgba(34,197,94,0.3)' : '#232d3b';
+      ctx.setLineDash(db === 30 ? [4, 3] : []);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(w - padR, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#5c6c82';
+      ctx.fillText(`${db}`, padL - 4, y);
+    }
+
+    cn0Bars = [];
+    if (!items.length) {
+      ctx.fillStyle = '#5c6c82';
+      ctx.textAlign = 'center';
+      ctx.font = '12px sans-serif';
+      ctx.fillText('Waiting for satellite signal telemetry...', w / 2, h / 2);
+      return;
+    }
+
+    const gap = 3;
+    const barW = Math.max(6, Math.min(26, (plotW / items.length) - gap));
+    const startX = padL + Math.max(0, (plotW - items.length * (barW + gap)) / 2);
+
+    items.forEach((it, idx) => {
+      const x = startX + idx * (barW + gap);
+      const bh = Math.min(plotH, (it.cno / maxDb) * plotH);
+      const y = padT + plotH - bh;
+      const used = useSigs ? it.prUsed : it.svUsed;
+      const color = GNSS_COLORS[it.gnssId] || '#94a3b8';
+
+      ctx.fillStyle = used ? color : color + '55';
+      ctx.fillRect(x, y, barW, bh);
+      if (used) {
+        ctx.strokeStyle = '#e6edf3';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, barW - 1, Math.max(1, bh - 1));
+      }
+
+      // Value above bar
+      if (barW >= 12) {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '9.5px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(it.cno), x + barW / 2, y - 6);
+      }
+
+      // Label below bar
+      const prn = (GNSS_PREFIX[it.gnssId] || '?') + String(it.svId).padStart(2, '0');
+      ctx.save();
+      ctx.translate(x + barW / 2, padT + plotH + 5);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = used ? '#e6edf3' : '#8b9bb0';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(useSigs ? `${prn}` : prn, 0, 0);
+      ctx.restore();
+
+      cn0Bars.push({ x, y: padT, w: barW, h: plotH, item: it, prn, used });
+    });
+  }
+
+  function latLonToEnMeters(lat, lon, refLat, refLon) {
+    const R_EARTH = 6378137.0;
+    const dLat = (lat - refLat) * Math.PI / 180;
+    const dLon = (lon - refLon) * Math.PI / 180;
+    const north = dLat * R_EARTH;
+    const east = dLon * R_EARTH * Math.cos(refLat * Math.PI / 180);
+    return { east, north };
+  }
+
+  function renderDeviationMap() {
+    const cv = document.getElementById('cvDev');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+
+    const pts = state.devPoints;
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.42;
+
+    if (!pts.length) {
+      ctx.strokeStyle = '#283344';
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+      ctx.fillStyle = '#5c6c82';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Waiting for valid fix samples...', cx, cy - 10);
+      document.getElementById('devStatsText').textContent = 'Samples: 0 | CEP50: -- m | R95: -- m';
+      return;
+    }
+
+    const ref = state.devRef || {
+      lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length,
+      lon: pts.reduce((a, p) => a + p.lon, 0) / pts.length
+    };
+
+    const offsets = pts.map(p => latLonToEnMeters(p.lat, p.lon, ref.lat, ref.lon));
+    const dists = offsets.map(o => Math.hypot(o.east, o.north)).sort((a, b) => a - b);
+    const cep50 = dists[Math.floor(dists.length * 0.5)] || 0;
+    const r95 = dists[Math.min(dists.length - 1, Math.floor(dists.length * 0.95))] || 0;
+    const maxDist = dists[dists.length - 1] || 1;
+
+    const scaleSel = document.getElementById('selDevScale').value;
+    const maxRangeM = scaleSel === 'auto' ? Math.max(1, maxDist * 1.15) : parseFloat(scaleSel);
+
+    document.getElementById('devStatsText').textContent =
+      `N=${pts.length} | CEP50=${cep50.toFixed(2)}m | R95=${r95.toFixed(2)}m | Max=${maxDist.toFixed(2)}m`;
+
+    // Grid circles
+    ctx.strokeStyle = '#263142';
+    ctx.lineWidth = 1;
+    [0.25, 0.5, 0.75, 1].forEach(f => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * f, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#5c6c82';
+      ctx.font = '9.5px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${(maxRangeM * f).toFixed(1)}m`, cx + 3, cy - R * f + 10);
+    });
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+
+    // CEP50 & R95 rings
+    const rCep = (cep50 / maxRangeM) * R;
+    const rR95 = (r95 / maxRangeM) * R;
+    if (rCep > 1 && rCep <= R * 1.2) {
+      ctx.strokeStyle = '#22c55e';
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(cx, cy, rCep, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (rR95 > 1 && rR95 <= R * 1.2) {
+      ctx.strokeStyle = '#f59e0b';
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(cx, cy, rR95, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Scatter points
+    offsets.forEach((o, idx) => {
+      const px = cx + (o.east / maxRangeM) * R;
+      const py = cy - (o.north / maxRangeM) * R;
+      const isLast = idx === offsets.length - 1;
+      ctx.fillStyle = isLast ? '#ef4444' : 'rgba(56, 189, 248, 0.55)';
+      ctx.beginPath();
+      ctx.arc(px, py, isLast ? 4 : 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Slippy Tile Math for OSM Canvas Map
+  function lon2tileX(lon, z) { return ((lon + 180) / 360) * Math.pow(2, z); }
+  function lat2tileY(lat, z) {
+    const r = lat * Math.PI / 180;
+    return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z);
+  }
+  function tileX2lon(x, z) { return (x / Math.pow(2, z)) * 360 - 180; }
+  function tileY2lat(y, z) {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  }
+
+  function renderSlippyMap() {
+    const cv = document.getElementById('cvMap');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.fillStyle = '#0e141c';
+    ctx.fillRect(0, 0, w, h);
+
+    const z = state.mapZoom;
+    const tileSize = 256;
+    const centerTx = lon2tileX(state.mapCenter.lon, z);
+    const centerTy = lat2tileY(state.mapCenter.lat, z);
+
+    const minTx = Math.floor(centerTx - w / (2 * tileSize));
+    const maxTx = Math.floor(centerTx + w / (2 * tileSize));
+    const minTy = Math.floor(centerTy - h / (2 * tileSize));
+    const maxTy = Math.floor(centerTy + h / (2 * tileSize));
+    const maxN = Math.pow(2, z);
+
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      for (let ty = minTy; ty <= maxTy; ty++) {
+        if (ty < 0 || ty >= maxN) continue;
+        const wrappedTx = ((tx % maxN) + maxN) % maxN;
+        const dx = w / 2 + (tx - centerTx) * tileSize;
+        const dy = h / 2 + (ty - centerTy) * tileSize;
+        const key = `${z}/${wrappedTx}/${ty}`;
+        let entry = state.tileCache.get(key);
+        if (!entry) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          entry = { img, status: 'loading' };
+          img.onload = () => { entry.status = 'ok'; scheduleRedraw(); };
+          img.onerror = () => { entry.status = 'err'; };
+          img.src = `https://tile.openstreetmap.org/${z}/${wrappedTx}/${ty}.png`;
+          state.tileCache.set(key, entry);
+        }
+        if (entry.status === 'ok') {
+          ctx.filter = 'brightness(0.75) contrast(1.05)';
+          ctx.drawImage(entry.img, dx, dy, tileSize, tileSize);
+          ctx.filter = 'none';
+        } else {
+          // Offline grid fallback
+          ctx.strokeStyle = '#1f2a38';
+          ctx.strokeRect(dx, dy, tileSize, tileSize);
+        }
+      }
+    }
+
+    const project = (lat, lon) => ({
+      x: w / 2 + (lon2tileX(lon, z) - centerTx) * tileSize,
+      y: h / 2 + (lat2tileY(lat, z) - centerTy) * tileSize
+    });
+
+    // Track polyline
+    if (state.trackPoints.length > 1) {
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      state.trackPoints.forEach((p, idx) => {
+        const pt = project(p.lat, p.lon);
+        if (idx === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      });
+      ctx.stroke();
+    }
+
+    // Current position + hAcc circle
+    if (state.nav.lat !== null && state.nav.lon !== null) {
+      const cur = project(state.nav.lat, state.nav.lon);
+      if (state.nav.hAccM && state.nav.hAccM > 0) {
+        const metersPerPx = (156543.03392 * Math.cos(state.nav.lat * Math.PI / 180)) / Math.pow(2, z);
+        const radPx = state.nav.hAccM / metersPerPx;
+        if (radPx > 2 && radPx < w) {
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(cur.x, cur.y, radPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cur.x, cur.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(11,15,20,0.75)';
+    ctx.fillRect(6, h - 22, 190, 16);
+    ctx.fillStyle = '#8b9bb0';
+    ctx.font = '10px monospace';
+    ctx.fillText(`Z${z} | ${state.mapCenter.lat.toFixed(5)}, ${state.mapCenter.lon.toFixed(5)}`, 10, h - 10);
+  }
+
+  function renderTimeSeries() {
+    const cv = document.getElementById('cvTs');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+
+    const hist = state.tsHistory;
+    const strips = [
+      { label: 'C/N0 Max/Mean (dBHz)', keys: ['cn0Max', 'cn0Mean'], colors: ['#38bdf8', '#22c55e'], min: 0, max: 55 },
+      { label: 'hAcc / vAcc (m)', keys: ['hAcc', 'vAcc'], colors: ['#f59e0b', '#a78bfa'], min: 0, max: null },
+      { label: 'PDOP / HDOP', keys: ['pdop', 'hdop'], colors: ['#2dd4bf', '#f472b6'], min: 0, max: null },
+      { label: 'SVs Used / Tracked', keys: ['svUsed', 'svTracked'], colors: ['#22c55e', '#64748b'], min: 0, max: null }
+    ];
+
+    const stripH = h / strips.length;
+    strips.forEach((st, idx) => {
+      const top = idx * stripH;
+      ctx.strokeStyle = '#222c3a';
+      ctx.beginPath();
+      ctx.moveTo(0, top + stripH - 0.5);
+      ctx.lineTo(w, top + stripH - 0.5);
+      ctx.stroke();
+
+      ctx.fillStyle = '#8b9bb0';
+      ctx.font = '10px monospace';
+      ctx.fillText(st.label, 8, top + 12);
+
+      if (hist.length < 2) return;
+      let vmax = st.max;
+      if (vmax === null) {
+        vmax = 1;
+        for (const p of hist) {
+          for (const k of st.keys) if (p[k] > vmax) vmax = p[k];
+        }
+        vmax *= 1.15;
+      }
+
+      const padL = 8, padR = 52, padT = top + 16, plotH = Math.max(12, stripH - 22);
+      const plotW = Math.max(20, w - padL - padR);
+
+      st.keys.forEach((k, ki) => {
+        ctx.strokeStyle = st.colors[ki];
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        hist.forEach((p, pi) => {
+          const x = padL + (pi / Math.max(1, hist.length - 1)) * plotW;
+          const y = padT + plotH * (1 - Math.min(1, Math.max(0, (p[k] - st.min) / (vmax - st.min))));
+          if (pi === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+
+      const last = hist[hist.length - 1];
+      ctx.fillStyle = st.colors[0];
+      ctx.textAlign = 'right';
+      ctx.fillText(last[st.keys[0]].toFixed(1), w - 6, top + 12);
+      ctx.fillStyle = st.colors[1];
+      ctx.fillText(last[st.keys[1]].toFixed(1), w - 6, top + 24);
+      ctx.textAlign = 'left';
+    });
+  }
+
+  let lastSpanMeta = null;
+  function renderMonSpan() {
+    const cv = document.getElementById('cvSpan');
+    if (!cv || cv.offsetParent === null) return;
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+
+    const blk = state.spanBlocks[0];
+    if (!blk) {
+      ctx.fillStyle = '#5c6c82';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Waiting for UBX-MON-SPAN (0x0A 0x31) spectrum data...', w / 2, h / 2);
+      lastSpanMeta = null;
+      return;
+    }
+
+    const padL = 36, padR = 12, padT = 22, padB = 26;
+    const plotW = Math.max(40, w - padL - padR);
+    const plotH = Math.max(40, h - padT - padB);
+    lastSpanMeta = { padL, padT, plotW, plotH, blk };
+
+    // Grid
+    ctx.strokeStyle = '#222c3a';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let v = 0; v <= 250; v += 50) {
+      const y = padT + plotH * (1 - v / 255);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = '#5c6c82';
+      ctx.fillText(`${(v * 0.25).toFixed(0)}`, padL - 4, y);
+    }
+
+    // Frequency labels
+    const fStartMHz = (blk.center - blk.span / 2) / 1e6;
+    const fEndMHz = (blk.center + blk.span / 2) / 1e6;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8b9bb0';
+    for (let i = 0; i <= 4; i++) {
+      const x = padL + (plotW * i) / 4;
+      const fMHz = fStartMHz + ((fEndMHz - fStartMHz) * i) / 4;
+      ctx.fillText(`${fMHz.toFixed(1)} MHz`, x, h - 10);
+    }
+
+    // Header stats
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText(`Center: ${(blk.center / 1e6).toFixed(3)} MHz | Span: ${(blk.span / 1e6).toFixed(2)} MHz | Res: ${(blk.res / 1e3).toFixed(1)} kHz | PGA: ${blk.pga} dB`, padL, 11);
+
+    // Max-Hold trace
+    const maxBins = state.spanMaxBins[0];
+    if (state.spanMaxHold && maxBins) {
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let i = 0; i < 256; i++) {
+        const x = padL + (i / 255) * plotW;
+        const y = padT + plotH * (1 - maxBins[i] / 255);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Live Spectrum trace + fill
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < 256; i++) {
+      const x = padL + (i / 255) * plotW;
+      const y = padT + plotH * (1 - blk.spectrum[i] / 255);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // =========================================================================
+  // 11. DOM Updaters
+  // =========================================================================
+  function fmtDeg(val) {
+    return val === null || val === undefined ? '--' : val.toFixed(7) + '°';
+  }
+
+  function updateDataAndStatusDOM() {
+    const n = state.nav;
+    const set = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
+
+    // Status bar
+    const fixLabel = FIX_TYPES[n.fixType] || 'NO FIX';
+    const sbFix = document.getElementById('sbFix');
+    sbFix.textContent = fixLabel;
+    sbFix.className = 'fix-pill ' + (n.fixType >= 3 ? 'fix-3d' : n.fixType === 2 ? 'fix-2d' : 'fix-no');
+
+    set('sbUtc', n.utcStr);
+    set('sbLatLon', n.lat !== null ? `${n.lat.toFixed(6)}, ${n.lon.toFixed(6)}` : '---, ---');
+    set('sbSvs', `${n.numSVUsed} / ${n.numSVTracked}`);
+    set('sbAcc', `${n.hAccM !== null ? n.hAccM.toFixed(2) : '--'} / ${n.vAccM !== null ? n.vAccM.toFixed(2) : '--'} m`);
+    set('sbPdop', n.pDOP !== null ? n.pDOP.toFixed(2) : '--');
+    set('sbBytes', `${state.rxBytes} B / ${state.txBytes} B`);
+    set('sbRate', `${state.msgRate} msg/s`);
+
+    // Data Panel
+    set('dLat', fmtDeg(n.lat));
+    set('dLon', fmtDeg(n.lon));
+    set('dHmsl', n.hMSL !== null ? `${n.hMSL.toFixed(2)} m` : '--');
+    set('dHellip', n.heightM !== null ? `${n.heightM.toFixed(2)} m` : '--');
+    set('dGeoid', n.geoidSepM !== null ? `${n.geoidSepM.toFixed(2)} m` : '--');
+
+    set('dUtc', n.utcStr);
+    set('dItow', n.iTOW !== null ? `${n.iTOW} ms` : '--');
+    set('dSpeed', n.gSpeedMs !== null ? `${n.gSpeedMs.toFixed(2)} m/s (${(n.gSpeedMs * 3.6).toFixed(1)} km/h)` : '--');
+    set('dHead', n.headMotDeg !== null ? `${n.headMotDeg.toFixed(1)}°` : '--');
+    set('dVelNed', n.velN !== null ? `${n.velN.toFixed(2)} / ${n.velE.toFixed(2)} / ${n.velD.toFixed(2)}` : '--');
+
+    set('dHvAcc', `${n.hAccM !== null ? n.hAccM.toFixed(2) : '--'} / ${n.vAccM !== null ? n.vAccM.toFixed(2) : '--'} m`);
+    set('dShAcc', `${n.sAccMs !== null ? n.sAccMs.toFixed(2) : '--'} m/s / ${n.headAccDeg !== null ? n.headAccDeg.toFixed(1) : '--'}°`);
+    set('dGpDop', `${n.gDOP !== null ? n.gDOP.toFixed(2) : '--'} / ${n.pDOP !== null ? n.pDOP.toFixed(2) : '--'}`);
+    set('dHvDop', `${n.hDOP !== null ? n.hDOP.toFixed(2) : '--'} / ${n.vDOP !== null ? n.vDOP.toFixed(2) : '--'}`);
+    set('dTneDop', `${n.tDOP !== null ? n.tDOP.toFixed(2) : '--'} / ${n.nDOP !== null ? n.nDOP.toFixed(2) : '--'} / ${n.eDOP !== null ? n.eDOP.toFixed(2) : '--'}`);
+
+    set('dFix', `${fixLabel} (0x${(n.flags || 0).toString(16).padStart(2, '0')})`);
+    set('dSvs', `${n.numSVUsed} / ${n.numSVTracked}`);
+    set('dTtff', `${n.ttffMs !== null ? (n.ttffMs / 1000).toFixed(2) + 's' : '--'} / ${n.msssMs !== null ? (n.msssMs / 1000).toFixed(0) + 's' : '--'}`);
+    set('dSwVer', state.ver.sw);
+    set('dHwVer', `${state.ver.hw}${state.ver.ext.length ? ' · ' + state.ver.ext[0] : ''}`);
+  }
+
+  function renderRfBlocks() {
+    const container = document.getElementById('rfBlocksContainer');
+    if (!state.rfBlocks.length) return;
+    const jamLabels = ['Unknown', 'OK (No Jamming)', 'Warning (Interference)', 'Critical (Jammed)'];
+    const antLabels = ['INIT', 'DONTKNOW', 'OK', 'SHORT', 'OPEN'];
+    const pwrLabels = ['OFF', 'ON', 'DONTKNOW'];
+    container.innerHTML = state.rfBlocks.map(b => {
+      const jamPct = Math.round((b.jamInd / 255) * 100);
+      const agcPct = Math.min(100, Math.round((b.agcCnt / 8191) * 100));
+      const jamColor = b.jammingState === 3 ? 'var(--err)' : b.jammingState === 2 ? 'var(--warn)' : 'var(--ok)';
+      return `
+        <div class="kv-card">
+          <h4>RF Block ${b.blockId}</h4>
+          <div class="kv-row"><span class="kv-k">Jamming State</span><span class="kv-v" style="color:${jamColor}">${jamLabels[b.jammingState] || b.jammingState}</span></div>
+          <div class="kv-row"><span class="kv-k">CW Jam Ind</span><span class="kv-v">${b.jamInd} / 255 (${jamPct}%)</span></div>
+          <div class="meter-bar"><div class="meter-fill" style="width:${jamPct}%; background:${jamColor};"></div></div>
+          <div class="kv-row" style="margin-top:4px;"><span class="kv-k">AGC Count</span><span class="kv-v">${b.agcCnt} (${agcPct}%)</span></div>
+          <div class="kv-row"><span class="kv-k">Noise / ms</span><span class="kv-v">${b.noisePerMS}</span></div>
+          <div class="kv-row"><span class="kv-k">Antenna / Pwr</span><span class="kv-v">${antLabels[b.antStatus] || b.antStatus} / ${pwrLabels[b.antPower] || b.antPower}</span></div>
+          <div class="kv-row"><span class="kv-k">I/Q (ofs,mag)</span><span class="kv-v">I(${b.ofsI},${b.magI}) Q(${b.ofsQ},${b.magQ})</span></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderPacketList() {
+    const el = document.getElementById('pktList');
+    if (el.offsetParent === null) return;
+    el.innerHTML = state.packets.map((p, idx) => `
+      <div class="pkt-row ${idx === state.selectedPktIdx ? 'selected' : ''}" data-idx="${idx}">
+        <span style="color:var(--text-muted)">${p.time}</span>
+        <span class="${p.proto === 'UBX' ? 'ubx-tag' : 'nmea-tag'}">${p.proto}</span>
+        <span>${p.msg}</span>
+        <span style="color:var(--text-dim)">${p.len}B</span>
+        <span style="color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.summary}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderTextConsole() {
+    const el = document.getElementById('conText');
+    el.innerHTML = state.nmeaLines.map(it =>
+      `<div class="nmea-line ${it.isTx ? 'tx' : ''}">[${it.t}] ${it.line.replace(/</g, '&lt;')}</div>`
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderHexConsole() {
+    const el = document.getElementById('conHex');
+    el.textContent = state.hexLines.join('\n');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderValgetTable() {
+    const tb = document.getElementById('valgetTableBody');
+    if (!state.valgetRows.length) return;
+    tb.innerHTML = state.valgetRows.map(r => `
+      <tr>
+        <td>${r.keyHex}</td>
+        <td>${r.name}</td>
+        <td>${r.layer}</td>
+        <td>${r.rawHex}</td>
+        <td>${r.val}</td>
+      </tr>
+    `).join('');
+  }
+
+  function syncCfgControlFromValget(keyId, val) {
+    const map = {
+      0x30210001: ['cfgRateMeas', 'val'],
+      0x30210002: ['cfgRateNav', 'val'],
+      0x20210003: ['cfgTimeRef', 'val'],
+      0x20110021: ['cfgDynModel', 'val'],
+      0x20110011: ['cfgFixMode', 'val'],
+      0x20d00001: ['cfgPmMode', 'val'],
+      0x40520001: ['cfgUart1Baud', 'val'],
+      0x10730001: ['cfgInUbx', 'chk'],
+      0x10740001: ['cfgOutUbx', 'chk'],
+      0x10740002: ['cfgOutNmea', 'chk'],
+      0x1031001f: ['sigGps', 'chk'],
+      0x10310001: ['sigGpsL1', 'chk'],
+      0x10310021: ['sigGal', 'chk'],
+      0x10310007: ['sigGalE1', 'chk'],
+      0x10310022: ['sigBds', 'chk'],
+      0x1031000d: ['sigBdsB1', 'chk'],
+      0x1031000f: ['sigBdsB1c', 'chk'],
+      0x10310025: ['sigGlo', 'chk'],
+      0x10310018: ['sigGloL1', 'chk'],
+      0x10310024: ['sigQzss', 'chk'],
+      0x10310012: ['sigQzssL1', 'chk'],
+      0x10310014: ['sigQzssL1s', 'chk'],
+      0x10310020: ['sigSbas', 'chk']
+    };
+    const spec = map[keyId];
+    if (!spec) return;
+    const el = document.getElementById(spec[0]);
+    if (!el) return;
+    if (spec[1] === 'chk') el.checked = Boolean(val);
+    else el.value = String(val);
+  }
+
+  function updateConnectionUI() {
+    const btnConn = document.getElementById('btnConnect');
+    const dot = document.getElementById('sbDot');
+    const sbPort = document.getElementById('sbPort');
+    if (state.connected) {
+      btnConn.textContent = 'Disconnect';
+      btnConn.className = 'btn-danger';
+      dot.className = 'dot ok';
+      const info = port && port.getInfo ? port.getInfo() : {};
+      const vidPid = info.usbVendorId ? ` (VID:${info.usbVendorId.toString(16)} PID:${info.usbProductId.toString(16)})` : '';
+      sbPort.textContent = `Connected @ ${state.baudrate}${vidPid}`;
+    } else {
+      btnConn.textContent = 'Connect Serial';
+      btnConn.className = 'btn-primary';
+      dot.className = 'dot';
+      sbPort.textContent = 'Disconnected';
+    }
+
+    const gatedIds = [
+      'btnAutobaud', 'btnDtr', 'btnRts', 'btnPollVer', 'btnEnableUbx',
+      'btnHotStart', 'btnWarmStart', 'btnColdStart', 'btnPollRf',
+      'btnCfgReadAll', 'btnApplyRate', 'btnApplyNav', 'btnApplySignals',
+      'btnApplyPort', 'btnApplyMsgOut', 'btnRawValget', 'btnRawValset',
+      'btnRawValdel', 'btnSendRst', 'btnTxUbx', 'btnTxNmea'
+    ];
+    for (const id of gatedIds) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !state.connected;
+    }
+  }
+
+  // =========================================================================
+  // 12. UI Event Wiring
+  // =========================================================================
+  if (!('serial' in navigator)) {
+    document.getElementById('compatBanner').style.display = 'flex';
+  } else {
+    navigator.serial.addEventListener('disconnect', (ev) => {
+      if (port && ev.target === port) {
+        closeSerialPort(false);
+        setAckBanner(false, 'Serial device disconnected');
+      }
+    });
+  }
+
+  document.getElementById('inpCustomBaud').addEventListener('change', async () => {
+    if (state.connected && port && document.getElementById('selBaud').value === 'custom') {
+      await closeSerialPort(true);
+      await openSerialPort(getSelectedBaudrate());
+    }
+  });
+
+  document.getElementById('selBaud').addEventListener('change', async (e) => {
+    const customInp = document.getElementById('inpCustomBaud');
+    customInp.style.display = e.target.value === 'custom' ? 'inline-block' : 'none';
+    if (state.connected && port) {
+      const newBaud = getSelectedBaudrate();
+      await closeSerialPort(true);
+      await openSerialPort(newBaud);
+    }
+  });
+
+  document.getElementById('btnConnect').addEventListener('click', async () => {
+    if (state.connected) {
+      await closeSerialPort(false);
+      return;
+    }
+    if (!('serial' in navigator)) {
+      document.getElementById('compatBanner').style.display = 'flex';
+      return;
+    }
+    try {
+      port = await navigator.serial.requestPort();
+      await openSerialPort(getSelectedBaudrate());
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        setAckBanner(false, `Port error: ${err.message}`);
+      }
+    }
+  });
+
+  document.getElementById('btnAutobaud').addEventListener('click', runAutobaud);
+
+  document.getElementById('btnDtr').addEventListener('click', async (e) => {
+    if (!port) return;
+    state.dtr = !state.dtr;
+    e.target.classList.toggle('active', state.dtr);
+    await port.setSignals({ dataTerminalReady: state.dtr, requestToSend: state.rts });
+  });
+
+  document.getElementById('btnRts').addEventListener('click', async (e) => {
+    if (!port) return;
+    state.rts = !state.rts;
+    e.target.classList.toggle('active', state.rts);
+    await port.setSignals({ dataTerminalReady: state.dtr, requestToSend: state.rts });
+  });
+
+  document.getElementById('btnPollVer').addEventListener('click', () => {
+    writeSerial(buildUbxFrame(0x0a, 0x04));
+  });
+
+  document.getElementById('btnPollRf').addEventListener('click', () => {
+    writeSerial(buildUbxFrame(0x0a, 0x38));
+    writeSerial(buildUbxFrame(0x0a, 0x31));
+  });
+
+  document.getElementById('btnEnableUbx').addEventListener('click', () => {
+    const items = [
+      { key: 0x10740001, type: 'L', value: 1 }, // UART1OUTPROT-UBX
+      { key: 0x20910007, type: 'U1', value: 1 }, // NAV-PVT UART1
+      { key: 0x20910016, type: 'U1', value: 1 }, // NAV-SAT UART1
+      { key: 0x20910346, type: 'U1', value: 1 }, // NAV-SIG UART1
+      { key: 0x20910039, type: 'U1', value: 1 }, // NAV-DOP UART1
+      { key: 0x2091001b, type: 'U1', value: 1 }, // NAV-STATUS UART1
+      { key: 0x2091035a, type: 'U1', value: 1 }, // MON-RF UART1
+      { key: 0x2091038c, type: 'U1', value: 1 }, // MON-SPAN UART1
+      // Also USB equivalents
+      { key: 0x20910009, type: 'U1', value: 1 },
+      { key: 0x20910018, type: 'U1', value: 1 },
+      { key: 0x20910348, type: 'U1', value: 1 },
+      { key: 0x2091003b, type: 'U1', value: 1 },
+      { key: 0x2091001d, type: 'U1', value: 1 },
+      { key: 0x2091035c, type: 'U1', value: 1 },
+      { key: 0x2091038e, type: 'U1', value: 1 }
+    ];
+    writeSerial(encodeValset(0x01, items));
+    writeSerial(buildUbxFrame(0x0a, 0x04)); // Also poll MON-VER
+  });
+
+  document.getElementById('btnHotStart').addEventListener('click', () => writeSerial(encodeCfgRst(0x0000, 0x01)));
+  document.getElementById('btnWarmStart').addEventListener('click', () => writeSerial(encodeCfgRst(0x0001, 0x01)));
+  document.getElementById('btnColdStart').addEventListener('click', () => writeSerial(encodeCfgRst(0xffff, 0x01)));
+
+  document.getElementById('btnClearStats').addEventListener('click', () => {
+    state.devPoints = [];
+    state.trackPoints = [];
+    state.tsHistory = [];
+    state.satTrails.clear();
+    state.spanMaxBins = [];
+  });
+
+  // Workspace Presets
+  const WS_PRESETS = {
+    overview: ['pData', 'pSky', 'pCn0', 'pDev', 'pMap', 'pTs', 'pRf', 'pCfg', 'pCon'],
+    rf: ['pSky', 'pCn0', 'pRf', 'pTs'],
+    pos: ['pData', 'pDev', 'pMap', 'pTs'],
+    config: ['pData', 'pCfg', 'pCon'],
+    console: ['pCon', 'pData']
+  };
+
+  function applyPanelVisibility(visibleIds) {
+    const allIds = WS_PRESETS.overview;
+    for (const id of allIds) {
+      const show = visibleIds.includes(id);
+      document.getElementById(id).classList.toggle('hidden', !show);
+      const chip = document.querySelector(`.chip[data-panel="${id}"]`);
+      if (chip) chip.classList.toggle('on', show);
+    }
+    scheduleRedraw();
+  }
+
+  document.getElementById('wsTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-ws]');
+    if (!btn) return;
+    document.querySelectorAll('#wsTabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyPanelVisibility(WS_PRESETS[btn.dataset.ws]);
+  });
+
+  document.getElementById('panelToggles').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip[data-panel]');
+    if (!chip) return;
+    const panel = document.getElementById(chip.dataset.panel);
+    const willShow = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !willShow);
+    chip.classList.toggle('on', willShow);
+    scheduleRedraw();
+  });
+
+  document.querySelectorAll('button[data-max]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById(btn.dataset.max);
+      const isMax = panel.classList.toggle('maximized');
+      btn.textContent = isMax ? 'Restore' : 'Max';
+      scheduleRedraw();
+    });
+  });
+
+  // GNSS filter legend
+  document.getElementById('gnssLegend').addEventListener('click', (e) => {
+    const leg = e.target.closest('.leg-dot[data-gnss]');
+    if (!leg) return;
+    const id = parseInt(leg.dataset.gnss, 10);
+    if (state.visibleGnss.has(id)) {
+      state.visibleGnss.delete(id);
+      leg.classList.add('off');
+    } else {
+      state.visibleGnss.add(id);
+      leg.classList.remove('off');
+    }
+    scheduleRedraw();
+  });
+
+  document.getElementById('btnSkyTrail').addEventListener('click', (e) => {
+    state.skyTrails = !state.skyTrails;
+    e.target.classList.toggle('active', state.skyTrails);
+    renderSkyview();
+  });
+
+  document.getElementById('btnSpanHold').addEventListener('click', (e) => {
+    state.spanMaxHold = !state.spanMaxHold;
+    e.target.classList.toggle('active', state.spanMaxHold);
+    renderMonSpan();
+  });
+
+  document.getElementById('btnDevSetRef').addEventListener('click', () => {
+    if (state.nav.lat !== null && state.nav.lon !== null) {
+      state.devRef = { lat: state.nav.lat, lon: state.nav.lon };
+      renderDeviationMap();
+    }
+  });
+  document.getElementById('btnDevMeanRef').addEventListener('click', () => {
+    state.devRef = null;
+    renderDeviationMap();
+  });
+  document.getElementById('selDevScale').addEventListener('change', renderDeviationMap);
+
+  // Map Controls & Pan/Zoom
+  document.getElementById('btnMapFollow').addEventListener('click', (e) => {
+    state.mapFollow = !state.mapFollow;
+    e.target.classList.toggle('active', state.mapFollow);
+  });
+  document.getElementById('btnMapZoomIn').addEventListener('click', () => {
+    state.mapZoom = Math.min(19, state.mapZoom + 1);
+    renderSlippyMap();
+  });
+  document.getElementById('btnMapZoomOut').addEventListener('click', () => {
+    state.mapZoom = Math.max(2, state.mapZoom - 1);
+    renderSlippyMap();
+  });
+
+  const cvMap = document.getElementById('cvMap');
+  let mapDragging = false, dragLast = null;
+  cvMap.addEventListener('mousedown', (e) => {
+    mapDragging = true;
+    dragLast = { x: e.clientX, y: e.clientY };
+    state.mapFollow = false;
+    document.getElementById('btnMapFollow').classList.remove('active');
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!mapDragging || !dragLast) return;
+    const dx = e.clientX - dragLast.x;
+    const dy = e.clientY - dragLast.y;
+    dragLast = { x: e.clientX, y: e.clientY };
+    const z = state.mapZoom;
+    const tx = lon2tileX(state.mapCenter.lon, z) - dx / 256;
+    const ty = lat2tileY(state.mapCenter.lat, z) - dy / 256;
+    state.mapCenter = { lat: tileY2lat(ty, z), lon: tileX2lon(tx, z) };
+    renderSlippyMap();
+  });
+  window.addEventListener('mouseup', () => { mapDragging = false; });
+  cvMap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    state.mapZoom = Math.max(2, Math.min(19, state.mapZoom + (e.deltaY < 0 ? 1 : -1)));
+    renderSlippyMap();
+  }, { passive: false });
+
+  // Canvas Hover Tooltips
+  document.getElementById('cvSky').addEventListener('mousemove', (e) => {
+    const rect = e.target.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const hit = skyMarkers.find(m => Math.hypot(m.x - mx, m.y - my) <= m.r + 2);
+    const tip = document.getElementById('tipSky');
+    if (hit) {
+      const s = hit.sat;
+      tip.textContent = `${hit.label} (${GNSS_NAMES[s.gnssId] || s.gnssId})\nEl: ${s.elev}°  Az: ${s.azim}°\nC/N0: ${s.cno} dBHz\nUsed: ${s.svUsed ? 'YES' : 'NO'} (Q=${s.qualityInd})`;
+      tip.style.left = Math.min(rect.width - 140, mx + 12) + 'px';
+      tip.style.top = Math.max(6, my - 20) + 'px';
+      tip.style.display = 'block';
+    } else {
+      tip.style.display = 'none';
+    }
+  });
+  document.getElementById('cvSky').addEventListener('mouseleave', () => {
+    document.getElementById('tipSky').style.display = 'none';
+  });
+
+  document.getElementById('cvCn0').addEventListener('mousemove', (e) => {
+    const rect = e.target.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const hit = cn0Bars.find(b => mx >= b.x && mx <= b.x + b.w);
+    const tip = document.getElementById('tipCn0');
+    if (hit) {
+      const it = hit.item;
+      tip.textContent = `${hit.prn} ${it.sigLabel || ''}\nC/N0: ${it.cno} dBHz\nUsed: ${hit.used ? 'YES' : 'NO'}\nPrRes: ${it.prRes !== undefined ? it.prRes.toFixed(1) + ' m' : '--'}`;
+      tip.style.left = Math.min(rect.width - 130, mx + 10) + 'px';
+      tip.style.top = '12px';
+      tip.style.display = 'block';
+    } else {
+      tip.style.display = 'none';
+    }
+  });
+  document.getElementById('cvCn0').addEventListener('mouseleave', () => {
+    document.getElementById('tipCn0').style.display = 'none';
+  });
+
+  document.getElementById('cvSpan').addEventListener('mousemove', (e) => {
+    const tip = document.getElementById('tipSpan');
+    if (!lastSpanMeta) { tip.style.display = 'none'; return; }
+    const rect = e.target.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const { padL, plotW, blk } = lastSpanMeta;
+    if (mx < padL || mx > padL + plotW) { tip.style.display = 'none'; return; }
+    const bin = Math.max(0, Math.min(255, Math.round(((mx - padL) / plotW) * 255)));
+    const freqMHz = (blk.center + blk.span * ((bin - 127) / 256)) / 1e6;
+    const ampDb = (blk.spectrum[bin] * 0.25).toFixed(2);
+    tip.textContent = `Bin ${bin}: ${freqMHz.toFixed(3)} MHz\nPower: ${ampDb} dB (raw ${blk.spectrum[bin]})`;
+    tip.style.left = Math.min(rect.width - 150, mx + 10) + 'px';
+    tip.style.top = '26px';
+    tip.style.display = 'block';
+  });
+  document.getElementById('cvSpan').addEventListener('mouseleave', () => {
+    document.getElementById('tipSpan').style.display = 'none';
+  });
+
+  // Config Center Tabs & Actions
+  document.getElementById('cfgTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-cfgtab]');
+    if (!btn) return;
+    document.querySelectorAll('#cfgTabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.cfg-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(btn.dataset.cfgtab).classList.add('active');
+  });
+
+  const getCfgLayer = () => parseInt(document.getElementById('selCfgLayer').value, 10);
+
+  document.getElementById('btnCfgReadAll').addEventListener('click', async () => {
+    const keys = [
+      0x30210001, 0x30210002, 0x20210003,
+      0x20110021, 0x20110011, 0x20d00001,
+      0x40520001, 0x10730001, 0x10740001, 0x10740002,
+      0x1031001f, 0x10310001, 0x10310021, 0x10310007,
+      0x10310022, 0x1031000d, 0x1031000f, 0x10310025, 0x10310018,
+      0x10310024, 0x10310012, 0x10310014, 0x10310020
+    ];
+    await writeSerial(encodeValget(0, keys));
+  });
+
+  document.getElementById('btnApplyRate').addEventListener('click', () => {
+    writeSerial(encodeValset(getCfgLayer(), [
+      { key: 0x30210001, type: 'U2', value: parseInt(document.getElementById('cfgRateMeas').value, 10) },
+      { key: 0x30210002, type: 'U2', value: parseInt(document.getElementById('cfgRateNav').value, 10) || 1 },
+      { key: 0x20210003, type: 'E1', value: parseInt(document.getElementById('cfgTimeRef').value, 10) }
+    ]));
+  });
+
+  document.getElementById('btnApplyNav').addEventListener('click', () => {
+    writeSerial(encodeValset(getCfgLayer(), [
+      { key: 0x20110021, type: 'E1', value: parseInt(document.getElementById('cfgDynModel').value, 10) },
+      { key: 0x20110011, type: 'E1', value: parseInt(document.getElementById('cfgFixMode').value, 10) },
+      { key: 0x20d00001, type: 'E1', value: parseInt(document.getElementById('cfgPmMode').value, 10) }
+    ]));
+  });
+
+  document.getElementById('btnApplySignals').addEventListener('click', () => {
+    const chk = id => document.getElementById(id).checked ? 1 : 0;
+    writeSerial(encodeValset(getCfgLayer(), [
+      { key: 0x1031001f, type: 'L', value: chk('sigGps') },
+      { key: 0x10310001, type: 'L', value: chk('sigGpsL1') },
+      { key: 0x10310021, type: 'L', value: chk('sigGal') },
+      { key: 0x10310007, type: 'L', value: chk('sigGalE1') },
+      { key: 0x10310022, type: 'L', value: chk('sigBds') },
+      { key: 0x1031000d, type: 'L', value: chk('sigBdsB1') },
+      { key: 0x1031000f, type: 'L', value: chk('sigBdsB1c') },
+      { key: 0x10310025, type: 'L', value: chk('sigGlo') },
+      { key: 0x10310018, type: 'L', value: chk('sigGloL1') },
+      { key: 0x10310024, type: 'L', value: chk('sigQzss') },
+      { key: 0x10310012, type: 'L', value: chk('sigQzssL1') },
+      { key: 0x10310014, type: 'L', value: chk('sigQzssL1s') },
+      { key: 0x10310020, type: 'L', value: chk('sigSbas') }
+    ]));
+  });
+
+  document.getElementById('btnApplyPort').addEventListener('click', () => {
+    const chk = id => document.getElementById(id).checked ? 1 : 0;
+    writeSerial(encodeValset(getCfgLayer(), [
+      { key: 0x40520001, type: 'U4', value: parseInt(document.getElementById('cfgUart1Baud').value, 10) },
+      { key: 0x10730001, type: 'L', value: chk('cfgInUbx') },
+      { key: 0x10740001, type: 'L', value: chk('cfgOutUbx') },
+      { key: 0x10740002, type: 'L', value: chk('cfgOutNmea') }
+    ]));
+  });
+
+  document.getElementById('btnApplyMsgOut').addEventListener('click', () => {
+    const targetPort = document.getElementById('selCfgPort').value;
+    const pvt = parseInt(document.getElementById('rateNavPvt').value, 10) || 0;
+    const sat = parseInt(document.getElementById('rateNavSat').value, 10) || 0;
+    const sig = parseInt(document.getElementById('rateNavSig').value, 10) || 0;
+    const dop = parseInt(document.getElementById('rateNavDop').value, 10) || 0;
+    const mon = parseInt(document.getElementById('rateMonRf').value, 10) || 0;
+    const nmea = parseInt(document.getElementById('rateNmeaStd').value, 10) || 0;
+
+    const pairs = [
+      [0x20910007, pvt], [0x20910016, sat], [0x20910346, sig],
+      [0x20910039, dop], [0x2091001b, dop], [0x2091035a, mon], [0x2091038c, mon],
+      [0x209100bb, nmea], [0x209100ac, nmea], [0x209100c0, nmea], [0x209100c5, nmea]
+    ];
+    const items = [];
+    for (const [uartKey, val] of pairs) {
+      if (targetPort === 'uart1' || targetPort === 'both') items.push({ key: uartKey, type: 'U1', value: val });
+      if (targetPort === 'usb' || targetPort === 'both') items.push({ key: uartKey + 2, type: 'U1', value: val });
+    }
+    writeSerial(encodeValset(getCfgLayer(), items));
+  });
+
+  function parseNumInput(str) {
+    const s = str.trim();
+    return s.toLowerCase().startsWith('0x') ? parseInt(s, 16) : parseInt(s, 10);
+  }
+
+  document.getElementById('btnRawValget').addEventListener('click', () => {
+    const key = parseNumInput(document.getElementById('rawKeyId').value);
+    if (!Number.isFinite(key)) return;
+    writeSerial(encodeValget(0, [key]));
+  });
+  document.getElementById('btnRawValset').addEventListener('click', () => {
+    const key = parseNumInput(document.getElementById('rawKeyId').value);
+    const val = parseNumInput(document.getElementById('rawKeyVal').value);
+    const type = document.getElementById('rawKeyType').value;
+    if (!Number.isFinite(key) || !Number.isFinite(val)) return;
+    writeSerial(encodeValset(getCfgLayer(), [{ key, type, value: val }]));
+  });
+  document.getElementById('btnRawValdel').addEventListener('click', () => {
+    const key = parseNumInput(document.getElementById('rawKeyId').value);
+    if (!Number.isFinite(key)) return;
+    writeSerial(encodeValdel(getCfgLayer(), [key]));
+  });
+  document.getElementById('btnSendRst').addEventListener('click', () => {
+    const mask = parseInt(document.getElementById('rstBbrMask').value, 16);
+    const mode = parseInt(document.getElementById('rstMode').value, 16);
+    writeSerial(encodeCfgRst(mask, mode));
+  });
+
+  // Console Tabs & TX
+  document.querySelectorAll('button[data-contab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('button[data-contab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ['conPackets', 'conText', 'conHex', 'conTx'].forEach(id => {
+        document.getElementById(id).style.display = id === btn.dataset.contab ? (id === 'conPackets' ? 'grid' : 'block') : 'none';
+      });
+      if (btn.dataset.contab === 'conText') renderTextConsole();
+      if (btn.dataset.contab === 'conHex') renderHexConsole();
+    });
+  });
+
+  document.getElementById('pktList').addEventListener('click', (e) => {
+    const row = e.target.closest('.pkt-row[data-idx]');
+    if (!row) return;
+    state.selectedPktIdx = parseInt(row.dataset.idx, 10);
+    const pkt = state.packets[state.selectedPktIdx];
+    if (pkt) {
+      document.getElementById('pktDetail').textContent =
+        `${pkt.time} [${pkt.proto}] ${pkt.msg} (${pkt.len} bytes)\n\n` +
+        JSON.stringify(pkt.decoded, null, 2) +
+        (pkt.rawHex ? `\n\nPayload Hex:\n${pkt.rawHex}` : '');
+    }
+    renderPacketList();
+  });
+
+  document.getElementById('btnConPause').addEventListener('click', (e) => {
+    state.consolePaused = !state.consolePaused;
+    e.target.classList.toggle('active', state.consolePaused);
+    e.target.textContent = state.consolePaused ? 'Resume' : 'Pause';
+  });
+
+  document.getElementById('btnConClear').addEventListener('click', () => {
+    state.packets = [];
+    state.nmeaLines = [];
+    state.hexLines = [];
+    document.getElementById('pktList').innerHTML = '';
+    document.getElementById('pktDetail').textContent = '';
+    document.getElementById('conText').innerHTML = '';
+    document.getElementById('conHex').textContent = '';
+  });
+
+  document.getElementById('btnTxUbx').addEventListener('click', () => {
+    const cls = parseNumInput(document.getElementById('txUbxCls').value);
+    const id = parseNumInput(document.getElementById('txUbxId').value);
+    const hexStr = document.getElementById('txUbxPayload').value.trim();
+    const payload = hexStr ? hexStr.split(/[\s,]+/).map(h => parseInt(h, 16)).filter(n => !Number.isNaN(n)) : [];
+    writeSerial(buildUbxFrame(cls, id, payload));
+  });
+
+  document.getElementById('btnTxNmea').addEventListener('click', () => {
+    const sentence = buildNmeaSentence(document.getElementById('txNmeaBody').value);
+    const enc = new TextEncoder().encode(sentence);
+    logNmeaLine(sentence.trim(), true);
+    writeSerial(enc);
+  });
+
+  // =========================================================================
+  // 13. Render Loop & Periodic Rate Counter
+  // =========================================================================
+  let redrawPending = false;
+  function scheduleRedraw() {
+    if (redrawPending) return;
+    redrawPending = true;
+    requestAnimationFrame(() => {
+      redrawPending = false;
+      updateDataAndStatusDOM();
+      renderSkyview();
+      renderCn0Chart();
+      renderDeviationMap();
+      renderSlippyMap();
+      renderTimeSeries();
+      renderMonSpan();
+    });
+  }
+
+  setInterval(() => {
+    state.msgRate = state.msgCountWindow;
+    state.msgCountWindow = 0;
+    scheduleRedraw();
+  }, 1000);
+
+  window.addEventListener('resize', scheduleRedraw);
+  updateConnectionUI();
+  scheduleRedraw();
+})();
+</script>
+</body>
+</html>
