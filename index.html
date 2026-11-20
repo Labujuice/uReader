@@ -810,11 +810,18 @@
       </div>
     </section>
 
-    <!-- 5. Slippy Tile Map -->
+    <!-- 5. Google Maps / Slippy Tile Map -->
     <section class="panel span-4" id="pMap">
       <div class="panel-hdr">
-        <div class="panel-title">Position Map <span class="panel-tag">OSM / Offline Grid</span></div>
+        <div class="panel-title">Position Map <span class="panel-tag">Google Maps</span></div>
         <div class="panel-actions">
+          <select id="selMapStyle" style="font-size:11px; padding:1px 4px;" title="Map layer">
+            <option value="m" selected>Google Road</option>
+            <option value="y">Google Hybrid</option>
+            <option value="s">Google Satellite</option>
+            <option value="p">Google Terrain</option>
+            <option value="osm">OpenStreetMap</option>
+          </select>
           <button class="btn-xs active" id="btnMapFollow">Follow</button>
           <button class="btn-xs" id="btnMapZoomIn">+</button>
           <button class="btn-xs" id="btnMapZoomOut">-</button>
@@ -1376,6 +1383,7 @@
     mapCenter: { lat: 25.0330, lon: 121.5654 },
     mapZoom: 16,
     mapFollow: true,
+    mapStyle: 'm',
     tileCache: new Map(),
 
     // Console buffers
@@ -2762,6 +2770,14 @@
     return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
   }
 
+  function getMapTileUrl(style, z, x, y) {
+    if (style === 'osm') {
+      return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    }
+    const sub = (x + y) & 3;
+    return `https://mt${sub}.google.com/vt/lyrs=${style}&x=${x}&y=${y}&z=${z}`;
+  }
+
   function renderSlippyMap() {
     const cv = document.getElementById('cvMap');
     if (!cv || cv.offsetParent === null) return;
@@ -2770,6 +2786,7 @@
     ctx.fillRect(0, 0, w, h);
 
     const z = state.mapZoom;
+    const style = state.mapStyle || 'm';
     const tileSize = 256;
     const centerTx = lon2tileX(state.mapCenter.lon, z);
     const centerTy = lat2tileY(state.mapCenter.lat, z);
@@ -2786,19 +2803,23 @@
         const wrappedTx = ((tx % maxN) + maxN) % maxN;
         const dx = w / 2 + (tx - centerTx) * tileSize;
         const dy = h / 2 + (ty - centerTy) * tileSize;
-        const key = `${z}/${wrappedTx}/${ty}`;
+        const key = `${style}/${z}/${wrappedTx}/${ty}`;
         let entry = state.tileCache.get(key);
         if (!entry) {
           const img = new Image();
-          img.crossOrigin = 'anonymous';
+          img.referrerPolicy = 'no-referrer';
           entry = { img, status: 'loading' };
           img.onload = () => { entry.status = 'ok'; scheduleRedraw(); };
           img.onerror = () => { entry.status = 'err'; };
-          img.src = `https://tile.openstreetmap.org/${z}/${wrappedTx}/${ty}.png`;
+          img.src = getMapTileUrl(style, z, wrappedTx, ty);
           state.tileCache.set(key, entry);
+          if (state.tileCache.size > 400) {
+            const firstKey = state.tileCache.keys().next().value;
+            state.tileCache.delete(firstKey);
+          }
         }
         if (entry.status === 'ok') {
-          ctx.filter = 'brightness(0.75) contrast(1.05)';
+          ctx.filter = (style === 's' || style === 'y') ? 'none' : 'brightness(0.88) contrast(1.04)';
           ctx.drawImage(entry.img, dx, dy, tileSize, tileSize);
           ctx.filter = 'none';
         } else {
@@ -3504,12 +3525,16 @@
   document.getElementById('selDevScale').addEventListener('change', renderDeviationMap);
 
   // Map Controls & Pan/Zoom
+  document.getElementById('selMapStyle').addEventListener('change', (e) => {
+    state.mapStyle = e.target.value;
+    renderSlippyMap();
+  });
   document.getElementById('btnMapFollow').addEventListener('click', (e) => {
     state.mapFollow = !state.mapFollow;
     e.target.classList.toggle('active', state.mapFollow);
   });
   document.getElementById('btnMapZoomIn').addEventListener('click', () => {
-    state.mapZoom = Math.min(19, state.mapZoom + 1);
+    state.mapZoom = Math.min(20, state.mapZoom + 1);
     renderSlippyMap();
   });
   document.getElementById('btnMapZoomOut').addEventListener('click', () => {
