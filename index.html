@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>u-Reader M10 — Web Serial GNSS &amp; u-blox Analyzer</title>
+  <title>uReader — Web Serial UBX / NMEA GNSS Analyzer</title>
   <style>
     :root {
       --bg-app: #0b0f14;
@@ -584,8 +584,8 @@
   <!-- Top Toolbar -->
   <div class="toolbar">
     <div class="brand">
-      <span>u-Reader</span>
-      <span class="brand-badge">M10 / UBX</span>
+      <span>uReader</span>
+      <span class="brand-badge">UBX / NMEA</span>
     </div>
 
     <div class="tb-group">
@@ -612,8 +612,8 @@
     <div class="tb-group">
       <select id="selGenMode" title="Receiver UBX configuration protocol">
         <option value="auto" selected>Gen: Auto</option>
-        <option value="m10">Gen: M10/M9 (VALSET)</option>
-        <option value="m8">Gen: M8/M7 (Legacy)</option>
+        <option value="m10">Gen 9/10 (VALSET)</option>
+        <option value="m8">Gen 8 (Legacy CFG)</option>
       </select>
       <button id="btnPollVer" disabled title="Poll UBX-MON-VER (0x0A 0x04)">Poll MON-VER</button>
       <button id="btnEnableUbx" class="btn-ok" disabled title="Enable NAV-PVT, NAV-SAT, DOP, STATUS, MON-RF/HW">Enable UBX</button>
@@ -636,7 +636,7 @@
       <button class="btn-xs active" data-ws="overview">Overview</button>
       <button class="btn-xs" data-ws="rf">RF &amp; Signal</button>
       <button class="btn-xs" data-ws="pos">Position &amp; Map</button>
-      <button class="btn-xs" data-ws="config">M10 Config</button>
+      <button class="btn-xs" data-ws="config">Config</button>
       <button class="btn-xs" data-ws="console">Packet &amp; Console</button>
     </div>
     <div class="panel-toggles" id="panelToggles">
@@ -647,8 +647,8 @@
       <span class="chip on" data-panel="pDev">Deviation</span>
       <span class="chip on" data-panel="pMap">Map</span>
       <span class="chip on" data-panel="pTs">Time-Series</span>
-      <span class="chip on" data-panel="pRf">RF / MON-SPAN</span>
-      <span class="chip on" data-panel="pCfg">M10 Config</span>
+      <span class="chip on" data-panel="pRf">RF / Spectrum</span>
+      <span class="chip on" data-panel="pCfg">Config</span>
       <span class="chip on" data-panel="pCon">Console</span>
     </div>
   </div>
@@ -846,10 +846,10 @@
       </div>
     </section>
 
-    <!-- 7. M10 RF & MON-SPAN -->
+    <!-- 7. RF Monitor & Spectrum -->
     <section class="panel span-6" id="pRf">
       <div class="panel-hdr">
-        <div class="panel-title">M10 RF Monitor &amp; Spectrum <span class="panel-tag">MON-RF / MON-SPAN</span></div>
+        <div class="panel-title">RF Monitor &amp; Spectrum <span class="panel-tag">MON-RF / MON-SPAN / MON-HW</span></div>
         <div class="panel-actions">
           <button class="btn-xs" id="btnPollRf" disabled>Poll RF/SPAN</button>
           <button class="btn-xs" id="btnSpanHold">Max-Hold</button>
@@ -873,10 +873,10 @@
       </div>
     </section>
 
-    <!-- 8. M10 Configuration Center -->
+    <!-- 8. Receiver Configuration Center -->
     <section class="panel span-6" id="pCfg">
       <div class="panel-hdr">
-        <div class="panel-title">M10 Configuration Center <span class="panel-tag">VALSET / VALGET / VALDEL</span></div>
+        <div class="panel-title">Receiver Configuration <span class="panel-tag">VALSET / Legacy CFG</span></div>
         <div class="panel-actions">
           <label class="tb-lbl">Layer:</label>
           <select id="selCfgLayer" style="font-size:11px; padding:1px 4px;">
@@ -974,9 +974,9 @@
         <!-- GNSS Signals -->
         <div class="cfg-section" id="cfgSig">
           <div class="cfg-card" style="margin-bottom:8px;">
-            <h5>u-blox M10 Concurrent Constellations <span class="panel-tag">Max 4 Major GNSS</span></h5>
+            <h5>GNSS Constellations &amp; Signals <span class="panel-tag">CFG-SIGNAL</span></h5>
             <div style="font-size:11px; color:var(--text-dim); margin-bottom:6px;">
-              M10 SPG 5.x supports up to 4 concurrent constellations (e.g. GPS + GAL + BDS + GLO, plus QZSS/SBAS).
+              Gen 9/10 signal enable switches via CFG-VALSET (e.g. M10 supports up to 4 concurrent major constellations).
             </div>
             <div class="cfg-grid">
               <div>
@@ -3185,9 +3185,8 @@
   function updateGenBadgeUI() {
     const sel = document.getElementById('selGenMode');
     if (sel && sel.options && sel.options[0]) {
-      sel.options[0].textContent = state.detectedGen
-        ? `Gen: Auto (${state.detectedGen.toUpperCase()})`
-        : 'Gen: Auto';
+      const label = state.detectedGen === 'm10' ? 'Gen 9/10' : state.detectedGen === 'm8' ? 'Gen 8' : '';
+      sel.options[0].textContent = label ? `Gen: Auto (${label})` : 'Gen: Auto';
     }
   }
 
@@ -3422,7 +3421,7 @@
       writeSerial(encodeCfgCfgSave());
       setAckBanner(true, 'Sent UBX-CFG-CFG Save (BBR/Flash)');
     } else {
-      setAckBanner(true, 'M10 persists automatically when Layer = BBR/Flash');
+      setAckBanner(true, 'Gen 9/10 persists automatically when Layer = BBR/Flash');
     }
   });
 
