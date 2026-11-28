@@ -2029,6 +2029,31 @@
       ]
     },
     {
+      cat: 'UBX-CFG', label: 'UBX-CFG (Configuration)', kind: 'ubx',
+      items: [
+        { key: '06:00', cls: 0x06, id: 0x00, name: 'PRT', full: 'UBX-CFG-PRT', uart1Key: null, periodic: false },
+        { key: '06:01', cls: 0x06, id: 0x01, name: 'MSG', full: 'UBX-CFG-MSG', uart1Key: null, periodic: false },
+        { key: '06:02', cls: 0x06, id: 0x02, name: 'INF', full: 'UBX-CFG-INF', uart1Key: null, periodic: false },
+        { key: '06:04', cls: 0x06, id: 0x04, name: 'RST', full: 'UBX-CFG-RST', uart1Key: null, commandOnly: true, periodic: false },
+        { key: '06:08', cls: 0x06, id: 0x08, name: 'RATE', full: 'UBX-CFG-RATE', uart1Key: null, periodic: false },
+        { key: '06:09', cls: 0x06, id: 0x09, name: 'CFG', full: 'UBX-CFG-CFG', uart1Key: null, commandOnly: true, periodic: false },
+        { key: '06:13', cls: 0x06, id: 0x13, name: 'ANT', full: 'UBX-CFG-ANT', uart1Key: null, periodic: false },
+        { key: '06:16', cls: 0x06, id: 0x16, name: 'SBAS', full: 'UBX-CFG-SBAS', uart1Key: null, periodic: false },
+        { key: '06:17', cls: 0x06, id: 0x17, name: 'NMEA', full: 'UBX-CFG-NMEA', uart1Key: null, periodic: false },
+        { key: '06:1e', cls: 0x06, id: 0x1e, name: 'ODO', full: 'UBX-CFG-ODO', uart1Key: null, periodic: false },
+        { key: '06:23', cls: 0x06, id: 0x23, name: 'NAVX5', full: 'UBX-CFG-NAVX5', uart1Key: null, periodic: false },
+        { key: '06:24', cls: 0x06, id: 0x24, name: 'NAV5', full: 'UBX-CFG-NAV5', uart1Key: null, periodic: false },
+        { key: '06:31', cls: 0x06, id: 0x31, name: 'TP5', full: 'UBX-CFG-TP5', uart1Key: null, periodic: false },
+        { key: '06:39', cls: 0x06, id: 0x39, name: 'ITFM', full: 'UBX-CFG-ITFM', uart1Key: null, periodic: false },
+        { key: '06:3b', cls: 0x06, id: 0x3b, name: 'PM2', full: 'UBX-CFG-PM2', uart1Key: null, periodic: false },
+        { key: '06:3e', cls: 0x06, id: 0x3e, name: 'GNSS', full: 'UBX-CFG-GNSS', uart1Key: null, periodic: false },
+        { key: '06:71', cls: 0x06, id: 0x71, name: 'TMODE3', full: 'UBX-CFG-TMODE3', uart1Key: null, periodic: false },
+        { key: '06:8a', cls: 0x06, id: 0x8a, name: 'VALSET', full: 'UBX-CFG-VALSET', uart1Key: null, commandOnly: true, periodic: false },
+        { key: '06:8b', cls: 0x06, id: 0x8b, name: 'VALGET', full: 'UBX-CFG-VALGET', uart1Key: null, periodic: false },
+        { key: '06:8c', cls: 0x06, id: 0x8c, name: 'VALDEL', full: 'UBX-CFG-VALDEL', uart1Key: null, commandOnly: true, periodic: false }
+      ]
+    },
+    {
       cat: 'NMEA-Standard', label: 'NMEA-Standard (0183)', kind: 'nmea',
       items: [
         { key: 'NMEA:GGA', cls: 0xf0, id: 0x00, nmeaId: 'GGA', name: 'GGA', full: 'NMEA-GGA', uart1Key: 0x209100bb, cfgName: 'NMEA_ID_GGA', periodic: true },
@@ -3279,7 +3304,358 @@
     '04:01': { fields: [{ off: 0, type: 'CH', varLen: true, name: 'str' }] },
     '04:02': { fields: [{ off: 0, type: 'CH', varLen: true, name: 'str' }] },
     '04:03': { fields: [{ off: 0, type: 'CH', varLen: true, name: 'str' }] },
-    '04:04': { fields: [{ off: 0, type: 'CH', varLen: true, name: 'str' }] }
+    '04:04': { fields: [{ off: 0, type: 'CH', varLen: true, name: 'str' }] },
+    // UBX-CFG (20)
+    '06:00': { // CFG-PRT (20B)
+      fields: [
+        { off: 0, type: 'U1', name: 'portID', enumMap: { 0: 'I2C/DDC', 1: 'UART1', 2: 'UART2', 3: 'USB', 4: 'SPI' } },
+        { off: 1, type: 'U1', name: 'reserved1' },
+        { off: 2, type: 'X2', name: 'txReady', bits: [
+          { mask: 0x0001, shift: 0, name: 'en', enumMap: ENUM_BOOL },
+          { mask: 0x0002, shift: 1, name: 'pol', enumMap: { 0: 'High-active', 1: 'Low-active' } },
+          { mask: 0x007c, shift: 2, name: 'pin' },
+          { mask: 0xff80, shift: 7, name: 'thres' }
+        ]},
+        { off: 4, type: 'X4', name: 'mode', bits: [
+          { mask: 0x000000c0, shift: 6, name: 'charLen', enumMap: { 0: '5bit', 1: '6bit', 2: '7bit', 3: '8bit' } },
+          { mask: 0x00000e00, shift: 9, name: 'parity', enumMap: { 0: 'Even', 1: 'Odd', 4: 'None' } },
+          { mask: 0x00003000, shift: 12, name: 'nStopBits', enumMap: { 0: '1', 1: '1.5', 2: '2', 3: '0.5' } }
+        ]},
+        { off: 8, type: 'U4', name: 'baudRate', unit: 'bit/s' },
+        { off: 12, type: 'X2', name: 'inProtoMask', bits: [
+          { mask: 0x0001, shift: 0, name: 'inUbx', enumMap: ENUM_BOOL },
+          { mask: 0x0002, shift: 1, name: 'inNmea', enumMap: ENUM_BOOL },
+          { mask: 0x0004, shift: 2, name: 'inRtcm', enumMap: ENUM_BOOL },
+          { mask: 0x0020, shift: 5, name: 'inRtcm3', enumMap: ENUM_BOOL }
+        ]},
+        { off: 14, type: 'X2', name: 'outProtoMask', bits: [
+          { mask: 0x0001, shift: 0, name: 'outUbx', enumMap: ENUM_BOOL },
+          { mask: 0x0002, shift: 1, name: 'outNmea', enumMap: ENUM_BOOL },
+          { mask: 0x0020, shift: 5, name: 'outRtcm3', enumMap: ENUM_BOOL }
+        ]},
+        { off: 16, type: 'X2', name: 'flags', bits: [{ mask: 0x0002, shift: 1, name: 'extendedTxTimeout', enumMap: ENUM_BOOL }] },
+        { off: 18, type: 'U1', count: 2, name: 'reserved2' }
+      ]
+    },
+    '06:01': { // CFG-MSG (3B or 8B)
+      fields: [
+        { off: 0, type: 'U1', name: 'msgClass' },
+        { off: 1, type: 'U1', name: 'msgID' },
+        { off: 2, type: 'U1', name: 'rate_or_I2C' },
+        { off: 3, type: 'U1', name: 'rateUART1' },
+        { off: 4, type: 'U1', name: 'rateUART2' },
+        { off: 5, type: 'U1', name: 'rateUSB' },
+        { off: 6, type: 'U1', name: 'rateSPI' },
+        { off: 7, type: 'U1', name: 'reserved0' }
+      ]
+    },
+    '06:02': { // CFG-INF (10*N)
+      fields: [],
+      repeat: {
+        startOff: 0, countFromRemaining: true, blockSize: 10,
+        labelFn: (v, i) => `Protocol [${i}] id=${v.protocolID}`,
+        fields: [
+          { off: 0, type: 'U1', name: 'protocolID', enumMap: { 0: 'UBX', 1: 'NMEA' } },
+          { off: 1, type: 'U1', count: 3, name: 'reserved1' },
+          { off: 4, type: 'X1', name: 'infMsgMask_I2C' },
+          { off: 5, type: 'X1', name: 'infMsgMask_UART1' },
+          { off: 6, type: 'X1', name: 'infMsgMask_UART2' },
+          { off: 7, type: 'X1', name: 'infMsgMask_USB' },
+          { off: 8, type: 'X1', name: 'infMsgMask_SPI' },
+          { off: 9, type: 'X1', name: 'infMsgMask_Res' }
+        ]
+      }
+    },
+    '06:04': { // CFG-RST (4B)
+      fields: [
+        { off: 0, type: 'X2', name: 'navBbrMask', bits: [
+          { mask: 0x0001, shift: 0, name: 'eph', enumMap: ENUM_BOOL },
+          { mask: 0x0002, shift: 1, name: 'alm', enumMap: ENUM_BOOL },
+          { mask: 0x0004, shift: 2, name: 'health', enumMap: ENUM_BOOL },
+          { mask: 0x0008, shift: 3, name: 'klob', enumMap: ENUM_BOOL },
+          { mask: 0x0010, shift: 4, name: 'pos', enumMap: ENUM_BOOL },
+          { mask: 0x0020, shift: 5, name: 'clkd', enumMap: ENUM_BOOL },
+          { mask: 0x0040, shift: 6, name: 'osc', enumMap: ENUM_BOOL },
+          { mask: 0x0080, shift: 7, name: 'utc', enumMap: ENUM_BOOL },
+          { mask: 0x0100, shift: 8, name: 'rtc', enumMap: ENUM_BOOL },
+          { mask: 0x8000, shift: 15, name: 'aop', enumMap: ENUM_BOOL }
+        ]},
+        { off: 2, type: 'U1', name: 'resetMode', enumMap: { 0: 'Hardware reset (immediately)', 1: 'Controlled software reset', 2: 'Controlled SW reset (GNSS only)', 4: 'Hardware reset after shutdown', 8: 'Controlled GNSS stop', 9: 'Controlled GNSS start' } },
+        { off: 3, type: 'U1', name: 'reserved1' }
+      ]
+    },
+    '06:08': { // CFG-RATE (6B)
+      fields: [
+        { off: 0, type: 'U2', name: 'measRate', unit: 'ms' },
+        { off: 2, type: 'U2', name: 'navRate', unit: 'cycles' },
+        { off: 4, type: 'U2', name: 'timeRef', enumMap: { 0: 'UTC', 1: 'GPS', 2: 'GLONASS', 3: 'BeiDou', 4: 'Galileo' } }
+      ]
+    },
+    '06:09': { // CFG-CFG (12/13B)
+      fields: [
+        { off: 0, type: 'X4', name: 'clearMask' },
+        { off: 4, type: 'X4', name: 'saveMask' },
+        { off: 8, type: 'X4', name: 'loadMask' },
+        { off: 12, type: 'X1', name: 'deviceMask', bits: [
+          { mask: 0x01, shift: 0, name: 'devBBR', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'devFlash', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'devEEPROM', enumMap: ENUM_BOOL },
+          { mask: 0x10, shift: 4, name: 'devSpiFlash', enumMap: ENUM_BOOL }
+        ]}
+      ]
+    },
+    '06:13': { // CFG-ANT (4B)
+      fields: [
+        { off: 0, type: 'X2', name: 'flags', bits: [
+          { mask: 0x0001, shift: 0, name: 'svcs', enumMap: ENUM_BOOL },
+          { mask: 0x0002, shift: 1, name: 'scd', enumMap: ENUM_BOOL },
+          { mask: 0x0004, shift: 2, name: 'ocd', enumMap: ENUM_BOOL },
+          { mask: 0x0008, shift: 3, name: 'pdwnOnSCD', enumMap: ENUM_BOOL },
+          { mask: 0x0010, shift: 4, name: 'recovery', enumMap: ENUM_BOOL }
+        ]},
+        { off: 2, type: 'X2', name: 'pins' }
+      ]
+    },
+    '06:16': { // CFG-SBAS (8B)
+      fields: [
+        { off: 0, type: 'X1', name: 'mode', bits: [
+          { mask: 0x01, shift: 0, name: 'enabled', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'test', enumMap: ENUM_BOOL }
+        ]},
+        { off: 1, type: 'X1', name: 'usage', bits: [
+          { mask: 0x01, shift: 0, name: 'range', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'diffCorr', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'integrity', enumMap: ENUM_BOOL }
+        ]},
+        { off: 2, type: 'U1', name: 'maxSBAS' },
+        { off: 3, type: 'X1', name: 'scanmode2' },
+        { off: 4, type: 'X4', name: 'scanmode1' }
+      ]
+    },
+    '06:17': { // CFG-NMEA (20B)
+      fields: [
+        { off: 0, type: 'X1', name: 'filter', bits: [
+          { mask: 0x01, shift: 0, name: 'posFilt', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'mskPosFilt', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'timeFilt', enumMap: ENUM_BOOL },
+          { mask: 0x08, shift: 3, name: 'dateFilt', enumMap: ENUM_BOOL },
+          { mask: 0x10, shift: 4, name: 'gpsOnlyFilter', enumMap: ENUM_BOOL },
+          { mask: 0x20, shift: 5, name: 'trackFilt', enumMap: ENUM_BOOL }
+        ]},
+        { off: 1, type: 'U1', name: 'nmeaVersion', enumMap: { 0x21: 'v2.1', 0x23: 'v2.3', 0x40: 'v4.0', 0x41: 'v4.10', 0x4b: 'v4.11' } },
+        { off: 2, type: 'U1', name: 'numSV' },
+        { off: 3, type: 'X1', name: 'flags', bits: [
+          { mask: 0x01, shift: 0, name: 'compat', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'consider', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'limit82', enumMap: ENUM_BOOL },
+          { mask: 0x08, shift: 3, name: 'highPrec', enumMap: ENUM_BOOL }
+        ]},
+        { off: 4, type: 'X4', name: 'gnssToFilter' },
+        { off: 8, type: 'U1', name: 'svNumbering', enumMap: { 0: 'Strict', 1: 'Extended' } },
+        { off: 9, type: 'U1', name: 'mainTalkerId', enumMap: { 0: 'Not overridden', 1: 'GP', 2: 'GL', 3: 'GN', 4: 'GA', 5: 'GB' } },
+        { off: 10, type: 'U1', name: 'gsvTalkerId', enumMap: { 0: 'GNSS specific', 1: 'Use main talker' } },
+        { off: 11, type: 'U1', name: 'version' },
+        { off: 12, type: 'CH', len: 2, name: 'bdsTalkerId' },
+        { off: 14, type: 'U1', count: 6, name: 'reserved1' }
+      ]
+    },
+    '06:1e': { // CFG-ODO (20B)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'U1', count: 3, name: 'reserved1' },
+        { off: 4, type: 'X1', name: 'flags', bits: [
+          { mask: 0x01, shift: 0, name: 'useODO', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'useCOG', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'outLPVel', enumMap: ENUM_BOOL },
+          { mask: 0x08, shift: 3, name: 'outLPCog', enumMap: ENUM_BOOL }
+        ]},
+        { off: 5, type: 'X1', name: 'profile', bits: [
+          { mask: 0x07, shift: 0, name: 'profileType', enumMap: { 0: 'Running', 1: 'Cycling', 2: 'Swimming', 3: 'Car', 4: 'Custom' } }
+        ]},
+        { off: 6, type: 'U1', count: 6, name: 'reserved2' },
+        { off: 12, type: 'U1', name: 'cogMaxSpeed', scale: 0.1, prec: 1, unit: 'm/s' },
+        { off: 13, type: 'U1', name: 'cogMaxPosAcc', unit: 'm' },
+        { off: 14, type: 'U1', count: 2, name: 'reserved3' },
+        { off: 16, type: 'U1', name: 'velLpGain' },
+        { off: 17, type: 'U1', name: 'cogLpGain' },
+        { off: 18, type: 'U1', count: 2, name: 'reserved4' }
+      ]
+    },
+    '06:23': { // CFG-NAVX5 (40/44B)
+      fields: [
+        { off: 0, type: 'U2', name: 'version' },
+        { off: 2, type: 'X2', name: 'mask1' },
+        { off: 4, type: 'X4', name: 'mask2' },
+        { off: 8, type: 'U1', count: 2, name: 'reserved1' },
+        { off: 10, type: 'U1', name: 'minSVs' },
+        { off: 11, type: 'U1', name: 'maxSVs' },
+        { off: 12, type: 'U1', name: 'minCNO', unit: 'dBHz' },
+        { off: 13, type: 'U1', name: 'reserved2' },
+        { off: 14, type: 'U1', name: 'iniFix3D', enumMap: ENUM_BOOL },
+        { off: 15, type: 'U1', count: 2, name: 'reserved3' },
+        { off: 17, type: 'U1', name: 'ackAiding', enumMap: ENUM_BOOL },
+        { off: 18, type: 'U2', name: 'wknRollover' },
+        { off: 20, type: 'U1', name: 'sigAttenCompMode' },
+        { off: 21, type: 'U1', count: 5, name: 'reserved4' },
+        { off: 26, type: 'U1', name: 'usePPP', enumMap: ENUM_BOOL },
+        { off: 27, type: 'U1', name: 'aopCfg' },
+        { off: 28, type: 'U1', count: 2, name: 'reserved5' },
+        { off: 30, type: 'U2', name: 'aopOrbMaxErr', unit: 'm' },
+        { off: 32, type: 'U1', count: 7, name: 'reserved6' },
+        { off: 39, type: 'U1', name: 'useAdr', enumMap: ENUM_BOOL }
+      ]
+    },
+    '06:24': { // CFG-NAV5 (36B)
+      fields: [
+        { off: 0, type: 'X2', name: 'mask' },
+        { off: 2, type: 'U1', name: 'dynModel', enumMap: DYN_MODELS },
+        { off: 3, type: 'U1', name: 'fixMode', enumMap: { 1: '2D only', 2: '3D only', 3: 'Auto 2D/3D' } },
+        { off: 4, type: 'I4', name: 'fixedAlt', scale: 0.01, prec: 2, unit: 'm' },
+        { off: 8, type: 'U4', name: 'fixedAltVar', scale: 0.0001, prec: 4, unit: 'm^2' },
+        { off: 12, type: 'I1', name: 'minElev', unit: 'deg' },
+        { off: 13, type: 'U1', name: 'drLimit', unit: 's' },
+        { off: 14, type: 'U2', name: 'pDop', scale: 0.1, prec: 1 },
+        { off: 16, type: 'U2', name: 'tDop', scale: 0.1, prec: 1 },
+        { off: 18, type: 'U2', name: 'pAcc', unit: 'm' },
+        { off: 20, type: 'U2', name: 'tAcc', unit: 'm' },
+        { off: 22, type: 'U1', name: 'staticHoldThresh', unit: 'cm/s' },
+        { off: 23, type: 'U1', name: 'dgnssTimeout', unit: 's' },
+        { off: 24, type: 'U1', name: 'cnoThreshNumSVs' },
+        { off: 25, type: 'U1', name: 'cnoThresh', unit: 'dBHz' },
+        { off: 26, type: 'U1', count: 2, name: 'reserved1' },
+        { off: 28, type: 'U2', name: 'staticHoldMaxDist', unit: 'm' },
+        { off: 30, type: 'U1', name: 'utcStandard', enumMap: { 0: 'Auto', 3: 'USNO', 6: 'SU', 7: 'NTSC', 8: 'NPLI' } },
+        { off: 31, type: 'U1', count: 5, name: 'reserved2' }
+      ]
+    },
+    '06:31': { // CFG-TP5 (32B)
+      fields: [
+        { off: 0, type: 'U1', name: 'tpIdx', enumMap: { 0: 'TIMEPULSE', 1: 'TIMEPULSE2' } },
+        { off: 1, type: 'U1', name: 'version' },
+        { off: 2, type: 'U1', count: 2, name: 'reserved1' },
+        { off: 4, type: 'I2', name: 'antCableDelay', unit: 'ns' },
+        { off: 6, type: 'I2', name: 'rfGroupDelay', unit: 'ns' },
+        { off: 8, type: 'U4', name: 'freqPeriod', unit: 'Hz/us' },
+        { off: 12, type: 'U4', name: 'freqPeriodLock', unit: 'Hz/us' },
+        { off: 16, type: 'U4', name: 'pulseLenRatio', unit: 'us/2^-32' },
+        { off: 20, type: 'U4', name: 'pulseLenRatioLock', unit: 'us/2^-32' },
+        { off: 24, type: 'I4', name: 'userConfigDelay', unit: 'ns' },
+        { off: 28, type: 'X4', name: 'flags', bits: [
+          { mask: 0x01, shift: 0, name: 'active', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'lockGnssFreq', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'lockedOtherSet', enumMap: ENUM_BOOL },
+          { mask: 0x08, shift: 3, name: 'isFreq', enumMap: ENUM_BOOL },
+          { mask: 0x10, shift: 4, name: 'isLength', enumMap: ENUM_BOOL },
+          { mask: 0x20, shift: 5, name: 'alignToTow', enumMap: ENUM_BOOL },
+          { mask: 0x40, shift: 6, name: 'polarity', enumMap: { 0: 'Falling', 1: 'Rising' } },
+          { mask: 0x780, shift: 7, name: 'gridUtcGnss', enumMap: { 0: 'UTC', 1: 'GPS', 2: 'GLONASS', 3: 'BeiDou', 4: 'Galileo' } }
+        ]}
+      ]
+    },
+    '06:39': { // CFG-ITFM (8B)
+      fields: [
+        { off: 0, type: 'X4', name: 'config', bits: [
+          { mask: 0x0000000f, shift: 0, name: 'bbThreshold' },
+          { mask: 0x000001f0, shift: 4, name: 'cwThreshold' },
+          { mask: 0x80000000, shift: 31, name: 'enable', enumMap: ENUM_BOOL }
+        ]},
+        { off: 4, type: 'X4', name: 'config2', bits: [
+          { mask: 0x00003000, shift: 12, name: 'antSetting', enumMap: { 0: 'Unknown', 1: 'Passive', 2: 'Active' } },
+          { mask: 0x00004000, shift: 14, name: 'enable2', enumMap: ENUM_BOOL }
+        ]}
+      ]
+    },
+    '06:3b': { // CFG-PM2 (44/48B)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'U1', name: 'reserved1' },
+        { off: 2, type: 'U1', name: 'maxStartupStateDur', unit: 's' },
+        { off: 3, type: 'U1', name: 'reserved2' },
+        { off: 4, type: 'X4', name: 'flags' },
+        { off: 8, type: 'U4', name: 'updatePeriod', unit: 'ms' },
+        { off: 12, type: 'U4', name: 'searchPeriod', unit: 'ms' },
+        { off: 16, type: 'U4', name: 'gridOffset', unit: 'ms' },
+        { off: 20, type: 'U2', name: 'onTime', unit: 's' },
+        { off: 22, type: 'U2', name: 'minAcqTime', unit: 's' },
+        { off: 24, type: 'U1', count: 20, name: 'reserved3' },
+        { off: 44, type: 'U4', name: 'extintInactivityMs', unit: 'ms' }
+      ]
+    },
+    '06:3e': { // CFG-GNSS (4 + 8*N)
+      fields: [
+        { off: 0, type: 'U1', name: 'msgVer' },
+        { off: 1, type: 'U1', name: 'numTrkChHw' },
+        { off: 2, type: 'U1', name: 'numTrkChUse' },
+        { off: 3, type: 'U1', name: 'numConfigBlocks' }
+      ],
+      repeat: {
+        startOff: 4, countField: 'numConfigBlocks', blockSize: 8,
+        labelFn: (v, i) => `GNSS [${i}] ${GNSS_NAMES[v.gnssId] || v.gnssId} (${(v.flags & 1) ? 'Enabled' : 'Disabled'})`,
+        fields: [
+          { off: 0, type: 'U1', name: 'gnssId', enumMap: GNSS_NAMES },
+          { off: 1, type: 'U1', name: 'resTrkCh' },
+          { off: 2, type: 'U1', name: 'maxTrkCh' },
+          { off: 3, type: 'U1', name: 'reserved1' },
+          { off: 4, type: 'X4', name: 'flags', bits: [{ mask: 0x01, shift: 0, name: 'enable', enumMap: ENUM_BOOL }] }
+        ]
+      }
+    },
+    '06:71': { // CFG-TMODE3 (40B)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'U1', name: 'reserved1' },
+        { off: 2, type: 'X2', name: 'flags', bits: [
+          { mask: 0x00ff, shift: 0, name: 'mode', enumMap: { 0: 'Disabled', 1: 'Survey-In', 2: 'Fixed Mode' } },
+          { mask: 0x0100, shift: 8, name: 'lla', enumMap: ENUM_BOOL }
+        ]},
+        { off: 4, type: 'I4', name: 'ecefXOrLat', unit: 'cm / 1e-7 deg' },
+        { off: 8, type: 'I4', name: 'ecefYOrLon', unit: 'cm / 1e-7 deg' },
+        { off: 12, type: 'I4', name: 'ecefZOrAlt', unit: 'cm' },
+        { off: 16, type: 'I1', name: 'ecefXOrLatHP', unit: '0.1mm / 1e-9 deg' },
+        { off: 17, type: 'I1', name: 'ecefYOrLonHP', unit: '0.1mm / 1e-9 deg' },
+        { off: 18, type: 'I1', name: 'ecefZOrAltHP', unit: '0.1mm' },
+        { off: 19, type: 'U1', name: 'reserved2' },
+        { off: 20, type: 'U4', name: 'fixedPosAcc', scale: 0.1, prec: 1, unit: 'mm' },
+        { off: 24, type: 'U4', name: 'svinMinDur', unit: 's' },
+        { off: 28, type: 'U4', name: 'svinAccLimit', scale: 0.1, prec: 1, unit: 'mm' },
+        { off: 32, type: 'U1', count: 8, name: 'reserved3' }
+      ]
+    },
+    '06:8a': { // CFG-VALSET (4 + KV)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'X1', name: 'layers', bits: [
+          { mask: 0x01, shift: 0, name: 'ram', enumMap: ENUM_BOOL },
+          { mask: 0x02, shift: 1, name: 'bbr', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'flash', enumMap: ENUM_BOOL }
+        ]},
+        { off: 2, type: 'U1', count: 2, name: 'reserved0' }
+      ],
+      kvList: { startOff: 4 }
+    },
+    '06:8b': { // CFG-VALGET (4 + KV)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'U1', name: 'layer', enumMap: { 0: 'RAM', 1: 'BBR', 2: 'Flash', 7: 'Default' } },
+        { off: 2, type: 'U2', name: 'position' }
+      ],
+      kvList: { startOff: 4 }
+    },
+    '06:8c': { // CFG-VALDEL (4 + 4*N)
+      fields: [
+        { off: 0, type: 'U1', name: 'version' },
+        { off: 1, type: 'X1', name: 'layers', bits: [
+          { mask: 0x02, shift: 1, name: 'bbr', enumMap: ENUM_BOOL },
+          { mask: 0x04, shift: 2, name: 'flash', enumMap: ENUM_BOOL }
+        ]},
+        { off: 2, type: 'U1', count: 2, name: 'reserved0' }
+      ],
+      repeat: {
+        startOff: 4, countFromRemaining: true, blockSize: 4,
+        labelFn: (v, i) => `Key [${i}] 0x${(v.keyId >>> 0).toString(16).padStart(8, '0')}`,
+        fields: [{ off: 0, type: 'X4', name: 'keyId' }]
+      }
+    }
   };
 
   // Declarative NMEA Field Schemas (All 12 NMEA-Standard Sentences)
@@ -6107,6 +6483,36 @@
       }
     }
 
+    if (schema.kvList && payload && payload.length > schema.kvList.startOff) {
+      let off = schema.kvList.startOff;
+      let idx = 0;
+      while (off + 4 <= payload.length) {
+        const keyId = dv.getUint32(off, true);
+        off += 4;
+        const sz = keySizeBytes(keyId);
+        if (off + sz > payload.length) break;
+        const t = inferKeyType(keyId);
+        const isSigned = t === 'I1' || t === 'I2' || t === 'I4';
+        let val = 0;
+        let rawHex = '0x';
+        for (let b = 0; b < sz; b++) rawHex += payload[off + b].toString(16).padStart(2, '0');
+        if (sz === 1) val = isSigned ? dv.getInt8(off) : dv.getUint8(off);
+        else if (sz === 2) val = isSigned ? dv.getInt16(off, true) : dv.getUint16(off, true);
+        else if (sz === 4) val = t === 'R4' ? dv.getFloat32(off, true) : (isSigned ? dv.getInt32(off, true) : dv.getUint32(off, true));
+        else if (sz === 8) val = t === 'R8' ? dv.getFloat64(off, true) : rawHex;
+        off += sz;
+        const meta = M10_KEYS[keyId];
+        const kHex = '0x' + (keyId >>> 0).toString(16).padStart(8, '0');
+        rows.push({
+          kind: 'field',
+          offType: `KV#${idx++} [${t}]`,
+          name: meta ? `${meta.name} (${kHex})` : kHex,
+          raw: rawHex,
+          scaled: String(val)
+        });
+      }
+    }
+
     if (schema.tailRemaining && payload && payload.length > schema.tailRemaining.startOff) {
       const tailLen = payload.length - schema.tailRemaining.startOff;
       const tailSlice = payload.slice(schema.tailRemaining.startOff);
@@ -6257,6 +6663,23 @@
       logNmeaLine(sentence.trim(), true);
       await writeSerial(SHARED_TEXT_ENCODER.encode(sentence));
       setAckBanner(true, `Polled NMEA: $EIGPQ,${m.nmeaId}`);
+    } else if (m.commandOnly) {
+      setAckBanner(false, `${m.full} 為設定/控制指令，不支援空白 Poll`);
+    } else if (m.key === '06:8b') {
+      const pollKeys = [
+        0x30210001, 0x30210002, 0x20210003,
+        0x20110021, 0x20110011, 0x40520001,
+        0x10730001, 0x10740001, 0x10740002,
+        0x10770001, 0x10780001, 0x10780002
+      ];
+      await writeSerial(encodeValget(0, pollKeys));
+      setAckBanner(true, `Polled ${m.full} (RAM 核心設定)`);
+    } else if (m.key === '06:01') {
+      await writeSerial(buildUbxFrame(0x06, 0x01, [0x01, 0x07]));
+      setAckBanner(true, `Polled CFG-MSG (01:07 NAV-PVT rate)`);
+    } else if (m.key === '06:02') {
+      await writeSerial(buildUbxFrame(0x06, 0x02, [0x00]));
+      setAckBanner(true, `Polled CFG-INF (UBX protocolID=0)`);
     } else {
       await writeSerial(buildUbxFrame(m.cls, m.id, []));
       setAckBanner(true, `Polled ${m.full}`);
@@ -6313,6 +6736,53 @@
   }
 
   let blinkClearTimer = null;
+  let lastTreeStructSig = '';
+
+  function updateMsgTreeInPlace(container, catMetaMap, now) {
+    let anyBlinking = false;
+    container.querySelectorAll('.msg-cat-hdr[data-cat]').forEach(hdr => {
+      const info = catMetaMap[hdr.dataset.cat];
+      if (!info) return;
+      const tag = hdr.querySelector('.panel-tag');
+      if (tag) tag.textContent = `${info.activeInCat} / ${info.total}`;
+    });
+    container.querySelectorAll('.msg-node[data-msgkey]').forEach(node => {
+      const key = node.dataset.msgkey;
+      const m = MSG_BY_KEY[key];
+      if (!m) return;
+      node.classList.toggle('selected', state.selectedMsgKey === key);
+      const st = state.msgStats[key];
+      const hz = st ? pruneAndCalcHz(st, now) : 0;
+      const rate = state.msgRates[key];
+      const blinking = Boolean(st && st.blinkUntil > now);
+      if (blinking) anyBlinking = true;
+      const dot = node.querySelector('.msg-blink-dot');
+      if (dot) dot.className = `msg-blink-dot ${blinking ? 'blink' : hz > 0 ? 'live' : ''}`;
+      const rBadge = node.querySelector('.rate-badge');
+      if (rBadge) {
+        const rateTxt = (rate === undefined || rate === null) ? (m.periodic ? '--' : 'Poll') : (rate === 0 ? 'Off' : `${rate}x`);
+        rBadge.textContent = rateTxt;
+        rBadge.classList.toggle('on', Boolean(rate > 0));
+      }
+      const hBadge = node.querySelector('.hz-badge');
+      if (hBadge) {
+        hBadge.textContent = `${hz.toFixed(1)} Hz`;
+        hBadge.classList.toggle('active', hz > 0);
+      }
+    });
+    return anyBlinking;
+  }
+
+  function renderMsgTreeSelection() {
+    const container = document.getElementById('msgTreeList');
+    if (!container) return;
+    container.querySelectorAll('.msg-node[data-msgkey].selected').forEach(el => {
+      if (el.dataset.msgkey !== state.selectedMsgKey) el.classList.remove('selected');
+    });
+    const target = container.querySelector(`.msg-node[data-msgkey="${CSS.escape(state.selectedMsgKey)}"]`);
+    if (target) target.classList.add('selected');
+  }
+
   function renderMsgTree() {
     const container = document.getElementById('msgTreeList');
     if (!container) return;
@@ -6322,8 +6792,9 @@
     const search = (document.getElementById('inpMsgSearch')?.value || '').trim().toLowerCase();
     const activeOnly = Boolean(document.getElementById('chkMsgActiveOnly')?.checked);
     const now = Date.now();
-    let anyBlinking = false;
-    const htmlParts = [];
+    const catEntries = [];
+    const catMetaMap = {};
+    const sigParts = [search, activeOnly ? '1' : '0'];
 
     for (const grp of MSG_CATALOG) {
       const matchedItems = grp.items.filter(m => {
@@ -6347,41 +6818,54 @@
         const st = state.msgStats[m.key];
         return (st && pruneAndCalcHz(st, now) > 0) || (state.msgRates[m.key] > 0);
       }).length;
+      catMetaMap[grp.cat] = { activeInCat, total: grp.items.length };
+      sigParts.push(`${grp.cat}:${expanded ? 1 : 0}:${expanded ? matchedItems.map(x => x.key).join(',') : ''}`);
+      catEntries.push({ grp, matchedItems, expanded, activeInCat });
+    }
 
-      htmlParts.push(`<div class="msg-cat">
-        <div class="msg-cat-hdr" data-cat="${grp.cat}">
-          <span>${expanded ? '▾' : '▸'} ${grp.label}</span>
-          <span class="panel-tag">${activeInCat} / ${grp.items.length}</span>
-        </div>`);
+    const structSig = sigParts.join('|');
+    let anyBlinking = false;
 
-      if (expanded) {
-        htmlParts.push('<div class="msg-cat-items">');
-        for (const m of matchedItems) {
-          const st = state.msgStats[m.key];
-          const hz = st ? pruneAndCalcHz(st, now) : 0;
-          const rate = state.msgRates[m.key];
-          const blinking = st && st.blinkUntil > now;
-          if (blinking) anyBlinking = true;
-          const rateTxt = (rate === undefined || rate === null) ? (m.periodic ? '--' : 'Poll') : (rate === 0 ? 'Off' : `${rate}x`);
-          const clsIdShort = `${m.cls.toString(16).padStart(2, '0').toUpperCase()}:${m.id.toString(16).padStart(2, '0').toUpperCase()}`;
-          htmlParts.push(`<div class="msg-node ${state.selectedMsgKey === m.key ? 'selected' : ''}" data-msgkey="${m.key}">
-            <div class="msg-node-left">
-              <span class="msg-blink-dot ${blinking ? 'blink' : hz > 0 ? 'live' : ''}"></span>
-              <span class="msg-node-name">${m.name}</span>
-              <span class="msg-node-id">${clsIdShort}</span>
-            </div>
-            <div class="msg-node-badges">
-              <span class="rate-badge ${rate > 0 ? 'on' : ''}">${rateTxt}</span>
-              <span class="hz-badge ${hz > 0 ? 'active' : ''}">${hz.toFixed(1)} Hz</span>
-            </div>
+    if (structSig !== lastTreeStructSig) {
+      lastTreeStructSig = structSig;
+      const htmlParts = [];
+      for (const { grp, matchedItems, expanded, activeInCat } of catEntries) {
+        htmlParts.push(`<div class="msg-cat">
+          <div class="msg-cat-hdr" data-cat="${grp.cat}">
+            <span>${expanded ? '▾' : '▸'} ${grp.label}</span>
+            <span class="panel-tag">${activeInCat} / ${grp.items.length}</span>
           </div>`);
+        if (expanded) {
+          htmlParts.push('<div class="msg-cat-items">');
+          for (const m of matchedItems) {
+            const st = state.msgStats[m.key];
+            const hz = st ? pruneAndCalcHz(st, now) : 0;
+            const rate = state.msgRates[m.key];
+            const blinking = Boolean(st && st.blinkUntil > now);
+            if (blinking) anyBlinking = true;
+            const rateTxt = (rate === undefined || rate === null) ? (m.periodic ? '--' : 'Poll') : (rate === 0 ? 'Off' : `${rate}x`);
+            const clsIdShort = `${m.cls.toString(16).padStart(2, '0').toUpperCase()}:${m.id.toString(16).padStart(2, '0').toUpperCase()}`;
+            htmlParts.push(`<div class="msg-node ${state.selectedMsgKey === m.key ? 'selected' : ''}" data-msgkey="${m.key}">
+              <div class="msg-node-left">
+                <span class="msg-blink-dot ${blinking ? 'blink' : hz > 0 ? 'live' : ''}"></span>
+                <span class="msg-node-name">${m.name}</span>
+                <span class="msg-node-id">${clsIdShort}</span>
+              </div>
+              <div class="msg-node-badges">
+                <span class="rate-badge ${rate > 0 ? 'on' : ''}">${rateTxt}</span>
+                <span class="hz-badge ${hz > 0 ? 'active' : ''}">${hz.toFixed(1)} Hz</span>
+              </div>
+            </div>`);
+          }
+          htmlParts.push('</div>');
         }
         htmlParts.push('</div>');
       }
-      htmlParts.push('</div>');
+      container.innerHTML = htmlParts.join('') || '<div style="padding:12px; color:var(--text-muted);">No matching messages.</div>';
+    } else {
+      anyBlinking = updateMsgTreeInPlace(container, catMetaMap, now);
     }
 
-    container.innerHTML = htmlParts.join('') || '<div style="padding:12px; color:var(--text-muted);">No matching messages.</div>';
     if (anyBlinking && !blinkClearTimer) {
       blinkClearTimer = setTimeout(() => {
         blinkClearTimer = null;
@@ -6398,7 +6882,7 @@
     if (!m) return;
     const st = state.msgStats[m.key];
     const knownRate = state.msgRates[m.key];
-    const canRate = Boolean(m.uart1Key || m.infBit !== undefined || m.nmeaInf || getEffectiveGen() === 'm8');
+    const canRate = Boolean(m.uart1Key || m.infBit !== undefined || m.nmeaInf || (getEffectiveGen() === 'm8' && m.periodic));
     const sig = `${m.key}|${st ? st.count : 0}|${st ? st.lastTs : 0}|${knownRate}|${state.connected}|${canRate}|${getActivePort()}`;
     if (sig === lastInspSig) return;
     lastInspSig = sig;
@@ -7183,7 +7667,28 @@
     state.expandedCats.clear();
     scheduleMessagesRender(true);
   });
-  document.getElementById('msgTreeList').addEventListener('click', (e) => {
+  function selectMessageNode(msgKey) {
+    if (!msgKey || !MSG_BY_KEY[msgKey]) return;
+    const changed = state.selectedMsgKey !== msgKey;
+    state.selectedMsgKey = msgKey;
+    const m = MSG_BY_KEY[msgKey];
+    if (changed && m && state.connected && (m.periodic || m.infBit !== undefined || m.nmeaInf) && state.msgRates[m.key] === undefined) {
+      syncSingleMsgRate(m);
+    }
+    renderMsgTreeSelection();
+    lastInspSig = '';
+    renderMsgInspector();
+  }
+
+  const msgTreeEl = document.getElementById('msgTreeList');
+  msgTreeEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const node = e.target.closest('.msg-node[data-msgkey]');
+    if (node) {
+      selectMessageNode(node.dataset.msgkey);
+    }
+  });
+  msgTreeEl.addEventListener('click', (e) => {
     const catHdr = e.target.closest('.msg-cat-hdr[data-cat]');
     if (catHdr) {
       const cat = catHdr.dataset.cat;
@@ -7191,22 +7696,17 @@
         state.expandedCats.delete(cat);
       } else {
         state.expandedCats.add(cat);
-        if (state.connected && !state.syncedCats.has(cat)) syncCategoryRates(cat);
+        if (state.connected && cat !== 'UBX-CFG' && !state.syncedCats.has(cat)) syncCategoryRates(cat);
       }
       scheduleMessagesRender(true);
       return;
     }
     const node = e.target.closest('.msg-node[data-msgkey]');
-    if (node) {
-      state.selectedMsgKey = node.dataset.msgkey;
-      const m = MSG_BY_KEY[state.selectedMsgKey];
-      if (m && state.connected && state.msgRates[m.key] === undefined) {
-        syncSingleMsgRate(m);
-      }
-      scheduleMessagesRender(true);
+    if (node && state.selectedMsgKey !== node.dataset.msgkey) {
+      selectMessageNode(node.dataset.msgkey);
     }
   });
-  document.getElementById('msgTreeList').addEventListener('dblclick', (e) => {
+  msgTreeEl.addEventListener('dblclick', (e) => {
     const node = e.target.closest('.msg-node[data-msgkey]');
     if (!node) return;
     const m = MSG_BY_KEY[node.dataset.msgkey];
