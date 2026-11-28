@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>uReader — Web Serial UBX / NMEA GNSS Analyzer</title>
+  <title>uReader v2.0.0 — Web Serial UBX / NMEA GNSS Analyzer</title>
   <style>
     :root {
       --bg-app: #0b0f14;
@@ -1071,7 +1071,7 @@
   <div class="toolbar">
     <div class="brand">
       <span>uReader</span>
-      <span class="brand-badge">v2.0 · UBX / NMEA</span>
+      <span id="appVersionBadge" class="brand-badge" title="uReader v2.0.0 (2026-11-28)">v2.0.0 · UBX / NMEA</span>
     </div>
 
     <div class="tb-group">
@@ -1905,6 +1905,10 @@
 <script>
 (() => {
   'use strict';
+
+  // Manual Release Version (單一人工版號定義，進版時請同步更新此處與 LOG.md)
+  const APP_VERSION = 'v2.0.0';
+  const APP_RELEASE_DATE = '2026-11-28';
 
   // =========================================================================
   // 1. Full-Series u-blox Protocol Database, Message Catalog & Field Schemas
@@ -6990,6 +6994,7 @@
 
       const exportObj = {
         schemaVersion: 'uReader-cfg-v1',
+        appVersion: APP_VERSION,
         exportedAt: now.toISOString(),
         deviceInfo: {
           mod: state.modName !== '--' ? state.modName : state.ver.hw,
@@ -8301,6 +8306,12 @@
   }, 1000);
 
   window.addEventListener('resize', () => scheduleRedraw(true));
+  document.title = `uReader ${APP_VERSION} — Web Serial UBX / NMEA GNSS Analyzer`;
+  const verBadge = document.getElementById('appVersionBadge');
+  if (verBadge) {
+    verBadge.textContent = `${APP_VERSION} · UBX / NMEA`;
+    verBadge.title = `uReader ${APP_VERSION} (Release ${APP_RELEASE_DATE})`;
+  }
   updateConnectionUI();
   updateRateControlDisplay();
   scheduleRedraw(true);

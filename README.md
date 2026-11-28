@@ -1,10 +1,11 @@
 # uReader — Web Serial UBX / NMEA GNSS Analyzer
 
+**Version:** `v2.0.0` ([Release Log / 更新日誌](LOG.md))  
 **Live Page:** https://labujuice.github.io/uReader/
 
 **uReader** is a single-file, zero-dependency HTML5 frontend tool for reading, analyzing, and debugging **UBX** and **NMEA 0183** GNSS serial streams (`/dev/ttyACMx`, `/dev/ttyUSBx`, COM ports) directly in the browser via the **Web Serial API**.
 
-Inspired by u-blox u-center, it works with any standard NMEA 0183 receiver and provides full bidirectional UBX monitoring and configuration for both **u-blox Gen 9/10** (`CFG-VALSET` / `VALGET` / `VALDEL`, e.g. M9, F9, M10) and **u-blox Gen 8 / 7** (legacy `CFG-PRT` / `CFG-MSG` / `CFG-RATE` / `CFG-NAV5` / `CFG-CFG`, e.g. M8N).
+Inspired by u-blox u-center, it works with any standard NMEA 0183 receiver and provides full bidirectional UBX monitoring, full-field message inspection, rate control, and production configuration backup/burn/verify for both **Modern KV (`PROTVER >= 27.0`: M9 / M10 / F9 / F11 / F20)** and **Legacy CFG (`PROTVER < 27.0`: u-blox 8 / M8)** receivers.
 
 ---
 
@@ -12,32 +13,23 @@ Inspired by u-blox u-center, it works with any standard NMEA 0183 receiver and p
 
 - **Single Standalone File (`index.html`)**
   - All HTML, CSS, and JavaScript are inlined with zero external JS/CSS dependencies.
-  - Works offline (Position Map automatically falls back to a coordinate grid when offline).
+  - Works completely offline (Position Map falls back to an offline coordinate grid when tiles are unreachable).
+- **Messages Explorer & Full-Field Unpacker (`Messages` Workspace)**
+  - Covers **7 categories / 86 official messages** (`UBX-NAV`, `UBX-MON`, `UBX-RXM`, `UBX-TIM`, `UBX-INF`, `UBX-CFG`, and `NMEA-Standard`).
+  - Keyword & hex Class/ID search, `Active Only` filtering, RX blink indicator, active-port `Rate` badge, and 2-second sliding-window `Live Hz` display.
+  - Unpacks every schema field (including reserved fields, `X1/X2/X4` bitfield sub-rows, repeated blocks, and `CFG-VALGET`/`CFG-VALSET` KV entries) plus Raw Hex/ASCII inspection, 1-click Copy Hex, Poll (`UBX` / `$EIGPQ`), and per-message `NAV Rate` configuration.
+- **Persistent Rate Control & Bidirectional Protocol Switches**
+  - Toolbar **Rate Control** strip with `Time Ref: UTC`, bidirectional `Meas Period (ms)` ↔ `Freq (Hz)` conversion, quick presets (`1/5/10/20/25 Hz`), `Nav Cycles (1..127)`, effective output rate readout, and automatic low-baudrate bandwidth overload warning.
+  - Bidirectional `[NMEA]` and `[UBX]` port-aware switches with `Active (Custom)` partial state detection and `🔇 靜默模式` indicator.
+- **Persistence, Production Backup & Batch Burn/Verify**
+  - **Save to Flash** (M8 `CFG-CFG` / Modern `CFG-VALSET 0x07`, with ROM-only `ACK-NAK` BBR `0x03` fallback prompt) and **Set Default** (with baudrate-reset warning modal).
+  - **Read & Save CFG**: Paginated full-receiver KV / M8 configuration export (`{MOD}_{PROTVER}_{YYYYMMDD_HHMMSS}.json`, `schemaVersion: "uReader-cfg-v1"`).
+  - **Load & Burn CFG**: Pre-flight generation guard & cross-model bisect/skip, automatic baud-change last-scheduling & serial reconnect, read-back PASS/FAIL diff banner, and Factory Batch Mode (`⚡ Burn Next Device`).
 - **Web Serial Connection & Autobaud**
-  - Select standard baudrates (`4800` – `921600`) or enter a custom baudrate.
-  - **Autobaud** scans common rates (`38400`, `9600`, `115200`, `230400`, `460800`, `57600`, `19200`, `4800`, `921600`) until valid UBX/NMEA frames are detected.
-  - Live `DTR` / `RTS` signal controls and automatic USB disconnect handling.
+  - Select standard baudrates (`4800` – `921600`) or enter a custom baudrate, plus `USB` / `UART1` active-port auto-detection and `Autobaud` scanning.
+  - Throttled UI pipeline & sliced read-loop yielding keep the UI responsive even under high-rate `/dev/ttyACM0` streams.
 - **u-center-Like Telemetry & Analysis Panels**
-  - **Data & Fix Status**: Latitude/Longitude, MSL & ellipsoid altitude, geoid separation, ground speed, heading, NED velocity, `hAcc`/`vAcc`/`sAcc`/`headAcc`, DOPs (`GDOP`/`PDOP`/`HDOP`/`VDOP`/`TDOP`), TTFF, uptime, and `UBX-MON-VER` firmware/hardware identity.
-  - **Skyview**: Polar azimuth/elevation plot color-coded by constellation (GPS, Galileo, BeiDou, GLONASS, QZSS, SBAS), Used vs. Tracked indicators, optional sky trails, and hover tooltips.
-  - **Signal Level (C/N0)**: Multi-signal bar chart from `UBX-NAV-SIG` (with fallback to `UBX-NAV-SAT` / NMEA `GSV`) and mean C/N0 readout.
-  - **Deviation Map**: Local ENU meter scatter plot with `CEP50`, `R95`, max drift, `Lock Ref`, and `Mean Ref`.
-  - **Position Map**: Free Google Maps tile layers (**Google Road**, **Google Hybrid**, **Google Satellite**, **Google Terrain**, plus **OpenStreetMap** fallback) with live track polyline, `hAcc` accuracy circle, pan/zoom, and `Follow` mode.
-  - **Time-Series Telemetry**: Rolling strip charts for C/N0, `hAcc`/`vAcc`, `PDOP`/`HDOP`, and `SVs Used`/`Tracked`.
-  - **RF Monitor & Spectrum Analyzer**:
-    - `UBX-MON-RF` (Gen 9/10) & `UBX-MON-HW` (Gen 8): Jamming State, CW Jamming Indicator, AGC Count, Noise/ms, Antenna status/power, I/Q metrics.
-    - `UBX-MON-SPAN`: 256-bin RF spectrum analyzer with Max-Hold trace and frequency/power crosshair readout.
-- **Dual-Generation UBX Receiver Configuration (`Gen: Auto / Gen 9/10 / Gen 8`)**
-  - Auto-detects receiver generation from `UBX-MON-VER` (`PROTVER`) and `ACK-NAK` fallback.
-  - Toolbar quick controls: **Poll MON-VER**, **Enable UBX**, **Stop NMEA**, **Save CFG** (`UBX-CFG-CFG` on Gen 8), and **Hot / Warm / Cold Start** (`UBX-CFG-RST`).
-  - **Receiver Configuration Center**:
-    - Gen 9/10: `UBX-CFG-VALSET` / `VALGET` / `VALDEL` across RAM / BBR / Flash layers (`CFG-RATE-*`, `CFG-NAVSPG-*`, `CFG-PM-OPERATEMODE`, `CFG-SIGNAL-*`, `CFG-UART1-*`, `CFG-MSGOUT-*`, and a Raw 32-bit Key-Value editor).
-    - Gen 8 Legacy: `CFG-PRT` (UART1 & USB `portID=3`), `CFG-MSG`, `CFG-RATE`, `CFG-NAV5`, and `CFG-CFG`.
-- **Packet Inspector & Serial Console**
-  - **Packet Tree**: Decoded UBX & NMEA packet list with field-by-field JSON inspection and raw hex payload.
-  - **Text Console**: Live NMEA sentence stream.
-  - **Hex View**: Formatted RX/TX hex + ASCII dump.
-  - **TX Builder**: Send custom UBX frames (auto-calculates `0xB5 0x62` header and Fletcher-8 checksum) or NMEA sentences (auto-appends `*XX\r\n`).
+  - **Data & Fix Status**, **Skyview** (constellation filters & trails), **Signal Level (C/N0)**, **Deviation Map** (`CEP50`/`R95`), **Position Map** (Google Maps / OSM + offline grid), **Time-Series Telemetry**, **RF Monitor & `MON-SPAN` Spectrum Analyzer**, **Config Center** (incl. F11 dual-band L5/E5a/B2a signals), and **Packet / Text / Hex Console & TX Builder**.
 
 ---
 
@@ -67,22 +59,26 @@ sudo usermod -aG dialout "$USER"
 
 ---
 
-## Supported UBX & NMEA Messages
+## Supported UBX & NMEA Messages (7 Categories · 86 Messages)
 
-| Protocol | Messages |
+| Category | Coverage |
 | :--- | :--- |
-| **UBX-NAV** | `NAV-PVT` (`0x01 0x07`), `NAV-SAT` (`0x01 0x35`), `NAV-SIG` (`0x01 0x43`), `NAV-DOP` (`0x01 0x04`), `NAV-STATUS` (`0x01 0x03`) |
-| **UBX-MON** | `MON-VER` (`0x0A 0x04`), `MON-RF` (`0x0A 0x38`), `MON-SPAN` (`0x0A 0x31`), `MON-HW` (`0x0A 0x09`) |
-| **UBX-CFG** | `CFG-VALSET` (`0x06 0x8A`), `CFG-VALGET` (`0x06 0x8B`), `CFG-VALDEL` (`0x06 0x8C`), `CFG-PRT` (`0x06 0x00`), `CFG-MSG` (`0x06 0x01`), `CFG-RST` (`0x06 0x04`), `CFG-RATE` (`0x06 0x08`), `CFG-CFG` (`0x06 0x09`), `CFG-NAV5` (`0x06 0x24`) |
-| **UBX-ACK** | `ACK-ACK` (`0x05 0x01`), `ACK-NAK` (`0x05 0x00`) |
-| **NMEA 0183** | `GGA`, `RMC`, `GSA`, `GSV`, `GST` (with multi-constellation talker IDs `GP`, `GA`, `GB`/`BD`, `GL`, `GQ`/`QZ`, `GN`) |
+| **UBX-NAV** (23) | `PVT`, `POSLLH`, `POSECEF`, `HPPOSLLH`, `HPPOSECEF`, `VELNED`, `VELECEF`, `STATUS`, `DOP`, `SAT`, `SIG`, `TIMEUTC`, `TIMEGPS`, `TIMEBDS`, `TIMEGAL`, `TIMEGLO`, `CLOCK`, `ORB`, `EOE`, `RELPOSNED`, `PL`, `COV`, `SVIN` |
+| **UBX-MON** (14) | `VER`, `RF`, `SPAN`, `HW`, `HW2`, `HW3`, `COMMS`, `SYS`, `IO`, `MSGPP`, `RXBUF`, `TXBUF`, `PATCH`, `GNSS` |
+| **UBX-RXM** (7) | `RAWX`, `SFRBX`, `RTCM`, `MEASX`, `COR`, `RLM`, `PMP` |
+| **UBX-TIM** (5) | `TP`, `TM2`, `VRFY`, `SMEAS`, `VCOCAL` |
+| **UBX-INF** (5) | `ERROR`, `WARNING`, `NOTICE`, `TEST`, `DEBUG` |
+| **UBX-CFG** (20) | `PRT`, `MSG`, `INF`, `RST`, `RATE`, `CFG`, `ANT`, `SBAS`, `NMEA`, `ODO`, `NAVX5`, `NAV5`, `TP5`, `ITFM`, `PM2`, `GNSS`, `TMODE3`, `VALSET`, `VALGET`, `VALDEL` |
+| **NMEA-Standard** (12) | `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA`, `GLL`, `GBS`, `GRS`, `DTM`, `TXT` |
+
+*(Plus `UBX-ACK-ACK` / `ACK-NAK` status decoding.)*
 
 ---
 
 ## Typical Workflow
 
 1. Choose the receiver baudrate (or click **Autobaud** after connecting).
-2. On connection, uReader polls `UBX-MON-VER` and `UBX-CFG-PRT` to detect the receiver protocol generation (`Gen 9/10` vs. `Gen 8`).
-3. Click **Enable UBX** to turn on binary `NAV-PVT`, `NAV-SAT`, `NAV-DOP`, `NAV-STATUS`, and `MON-RF`/`MON-SPAN` (or `MON-HW` on Gen 8).
-4. Optionally click **Stop NMEA** to switch the active port to UBX-only output.
-5. On Gen 8 devices, click **Save CFG** to persist settings to BBR/Flash; on Gen 9/10 devices, select `RAM + BBR` or `RAM + BBR + Flash` as the target layer before applying changes.
+2. On connection, uReader queries `UBX-MON-VER` (and `CFG-PRT` on M8) plus USB/UART1 detection to set **Gen** (`Modern KV` vs `Legacy M8`) and **Port** (`USB` vs `UART1`) automatically.
+3. Use the **Rate Control** strip to adjust measurement rate (`1–25+ Hz`) and nav cycles, or toggle **`[NMEA]`** / **`[UBX]`** on the active port.
+4. Open the **Messages** tab to inspect all 86 messages with full field unpacking, live Hz, Poll (`UBX`/`$EIGPQ`), and per-message `NAV Rate`.
+5. Click **Save to Flash** (falls back to `RAM+BBR` on ROM-only modules) or use **Read & Save CFG** / **Load & Burn CFG** for full-receiver backup and verified batch flashing.
