@@ -3780,8 +3780,22 @@
     }
   }
 
-  function utcTimestampNow() {
-    return new Date().toISOString().replace('T', ' ').slice(0, 23) + ' UTC';
+  const SHARED_TEXT_ENCODER = new TextEncoder();
+
+  function utcTimestampFromMs(ms) {
+    return new Date(ms).toISOString().replace('T', ' ').slice(0, 23) + ' UTC';
+  }
+
+  function getMsgRawFrameBytes(m, st) {
+    if (!m || !st) return null;
+    if (st.lastFrame) return st.lastFrame;
+    if (m.kind === 'nmea' && st.lastNmea) {
+      return (st.lastFrame = SHARED_TEXT_ENCODER.encode(st.lastNmea + '\r\n'));
+    }
+    if (m.kind === 'ubx' && st.lastPayload) {
+      return (st.lastFrame = buildUbxFrame(m.cls, m.id, st.lastPayload));
+    }
+    return st.lastPayload || null;
   }
 
   function ensureMsgStat(msgKey) {
@@ -3810,14 +3824,13 @@
     return st.timestamps.length / 2.0;
   }
 
-  function recordMsgArrival(msgKey, payload, frameBytes, nmeaStr = null) {
+  function recordMsgArrival(msgKey, payload, nmeaStr = null) {
     const now = Date.now();
     const st = ensureMsgStat(msgKey);
     st.count++;
     st.lastTs = now;
-    st.lastUtc = utcTimestampNow();
+    st.lastFrame = null;
     if (payload) st.lastPayload = new Uint8Array(payload);
-    if (frameBytes) st.lastFrame = new Uint8Array(frameBytes);
     if (nmeaStr !== null) st.lastNmea = nmeaStr;
     st.timestamps.push(now);
     if (st.timestamps.length > 200) st.timestamps.shift();
@@ -3860,9 +3873,8 @@
     const decoded = {};
     let summary = `${payload.length} B`;
 
-    const frame = buildUbxFrame(cls, id, payload);
     if (MSG_BY_KEY[key]) {
-      recordMsgArrival(key, payload, frame);
+      recordMsgArrival(key, payload);
     }
 
     if (cls === 0x05 && payload.length >= 2) {
@@ -3937,7 +3949,8 @@
       decoded.msgID = `0x${mId.toString(16).padStart(2, '0')}`;
       if (MSG_BY_KEY[msgKey]) {
         state.msgRates[msgKey] = activeRate;
-        updateProtoToggleStates();
+        dirtyUi.proto = true;
+        scheduleSlowUi();
       }
       summary = `${msgKey} rate=${activeRate}`;
       dispatchToWaiters({ status: 'data', cls, id, payload, msgKey, rate: activeRate });
@@ -4170,7 +4183,8 @@
         blockId: 0, jammingState, antStatus, antPower, noisePerMS, agcCnt, jamInd,
         ofsI: 0, magI: 0, ofsQ: 0, magQ: 0
       }];
-      renderRfBlocks();
+      dirtyUi.rf = true;
+      scheduleSlowUi();
       decoded.noisePerMS = noisePerMS;
       decoded.agcCnt = agcCnt;
       decoded.antStatus = antStatus;
@@ -4201,7 +4215,8 @@
         });
       }
       state.rfBlocks = blocks;
-      renderRfBlocks();
+      dirtyUi.rf = true;
+      scheduleSlowUi();
       decoded.nBlocks = nBlocks;
       decoded.blocks = blocks;
       summary = blocks.length ? `Blk0 jam=${blocks[0].jamInd} agc=${blocks[0].agcCnt}` : `${nBlocks} blocks`;
@@ -4293,9 +4308,10 @@
           }
         }
       }
-      updateProtoToggleStates();
+      dirtyUi.proto = true;
       state.valgetRows = [...items, ...state.valgetRows].slice(0, 60);
-      renderValgetTable();
+      dirtyUi.valget = true;
+      scheduleSlowUi();
       decoded.layer = layerName;
       decoded.position = position;
       decoded.items = items;
@@ -4345,8 +4361,7 @@
 
     const nmeaKey = `NMEA:${type}`;
     if (MSG_BY_KEY[nmeaKey]) {
-      const bytes = new TextEncoder().encode(line + '\r\n');
-      recordMsgArrival(nmeaKey, bytes, bytes, line);
+      recordMsgArrival(nmeaKey, null, line);
     }
 
     if (type === 'GGA' && f.length >= 14) {
@@ -4585,17 +4600,24 @@
     if (!autobaudActive && !state.baudReconnecting) {
       setTimeout(async () => {
         if (state.connected && !autobaudActive) {
-          await writeSerial(buildUbxFrame(0x0a, 0x04)); // Poll MON-VER
+          await sendAndWait(buildUbxFrame(0x0a, 0x04), e => e.cls === 0x0a && e.id === 0x04, 300);
+          if (!state.connected || autobaudActive) return;
           state.quietAckBanner = true;
-          await sendAndWait(buildUbxFrame(0x06, 0x00), e => (e.cls === 0x06 && e.id === 0x00) || (e.ackCls === 0x06 && e.ackId === 0x00), 350);
-          if (getEffectiveGen() === 'm8') {
-            await writeSerial(buildUbxFrame(0x06, 0x08)); // Poll CFG-RATE
-          } else {
-            await sendAndWait(encodeValget(0, [0x30210001, 0x30210002, 0x20210003]), e => (e.cls === 0x06 && e.id === 0x8b) || (e.ackCls === 0x06 && e.ackId === 0x8b), 450);
-            await syncCategoryRates('UBX-NAV');
+          try {
+            if (getEffectiveGen() !== 'm10') {
+              await sendAndWait(buildUbxFrame(0x06, 0x00), e => (e.cls === 0x06 && e.id === 0x00) || (e.ackCls === 0x06 && e.ackId === 0x00), 300);
+            }
+            if (!state.connected) return;
+            if (getEffectiveGen() === 'm8') {
+              await writeSerial(buildUbxFrame(0x06, 0x08)); // Poll CFG-RATE
+            } else {
+              await sendAndWait(encodeValget(0, [0x30210001, 0x30210002, 0x20210003]), e => (e.cls === 0x06 && e.id === 0x8b) || (e.ackCls === 0x06 && e.ackId === 0x8b), 450);
+              if (state.connected) await syncCategoryRates('UBX-NAV');
+            }
+          } finally {
+            state.quietAckBanner = false;
           }
-          state.quietAckBanner = false;
-          if (state.detectedGen === 'm10') {
+          if (state.connected && state.detectedGen === 'm10') {
             writeSerial(buildUbxFrame(0x0a, 0x36)); // Poll MON-COMMS for port auto-check
           }
         }
@@ -4655,16 +4677,30 @@
 
   function startReadLoop() {
     readLoopPromise = (async () => {
+      let burstStart = performance.now();
       while (port && port.readable && !closingPort) {
         reader = port.readable.getReader();
         try {
           while (true) {
+            const waitStart = performance.now();
             const { value, done } = await reader.read();
             if (done) break;
+            // If read() waited on I/O, browser event loop already breathed; reset continuous-work budget
+            if (performance.now() - waitStart >= 2) {
+              burstStart = performance.now();
+            }
             if (value && value.length) {
               state.rxBytes += value.length;
               logHexChunk(value, 'RX');
-              streamParser.feed(value);
+              const SLICE = 4096;
+              for (let off = 0; off < value.length; off += SLICE) {
+                streamParser.feed(value.subarray(off, Math.min(value.length, off + SLICE)));
+                if (performance.now() - burstStart >= 8) {
+                  await new Promise(r => setTimeout(r, 0));
+                  burstStart = performance.now();
+                  if (closingPort || !port) break;
+                }
+              }
             }
           }
         } catch (err) {
@@ -4735,9 +4771,47 @@
   // =========================================================================
   // 9. Console & Packet Log Helpers
   // =========================================================================
+  let _cachedTimeMs = 0;
+  let _cachedTimeStr = '00:00:00.000';
   function fmtTimeNow() {
-    const d = new Date();
-    return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+    const now = Date.now();
+    if (now - _cachedTimeMs >= 5 || now < _cachedTimeMs) {
+      const d = new Date(now);
+      _cachedTimeMs = now;
+      _cachedTimeStr = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+    }
+    return _cachedTimeStr;
+  }
+
+  const dirtyUi = { packets: false, text: false, hex: false, rf: false, valget: false, proto: false };
+  let lastSlowUiTs = 0;
+  let slowUiTimer = null;
+  function flushSlowUi() {
+    lastSlowUiTs = performance.now();
+    if (dirtyUi.packets) { dirtyUi.packets = false; renderPacketList(); }
+    if (dirtyUi.text) { dirtyUi.text = false; renderTextConsole(); }
+    if (dirtyUi.hex) { dirtyUi.hex = false; renderHexConsole(); }
+    if (dirtyUi.rf) { dirtyUi.rf = false; renderRfBlocks(); }
+    if (dirtyUi.valget) { dirtyUi.valget = false; renderValgetTable(); }
+    if (dirtyUi.proto) { dirtyUi.proto = false; updateProtoToggleStates(); }
+  }
+  function scheduleSlowUi(immediate = false) {
+    if (immediate) {
+      if (slowUiTimer) { clearTimeout(slowUiTimer); slowUiTimer = null; }
+      flushSlowUi();
+      return;
+    }
+    const now = performance.now();
+    const minInterval = 100; // Max 10 FPS for heavy console/table DOM rebuilds
+    if (now - lastSlowUiTs >= minInterval) {
+      if (slowUiTimer) { clearTimeout(slowUiTimer); slowUiTimer = null; }
+      requestAnimationFrame(flushSlowUi);
+    } else if (!slowUiTimer) {
+      slowUiTimer = setTimeout(() => {
+        slowUiTimer = null;
+        requestAnimationFrame(flushSlowUi);
+      }, minInterval - (now - lastSlowUiTs));
+    }
   }
 
   function pushPacket(proto, msg, len, summary, decoded, rawBytes = null) {
@@ -4749,32 +4823,38 @@
       len,
       summary,
       decoded,
-      rawHex: rawBytes ? [...rawBytes].map(b => b.toString(16).padStart(2, '0')).join(' ') : ''
+      rawBytes: rawBytes ? new Uint8Array(rawBytes) : null,
+      rawHex: null
     });
     if (state.packets.length > 200) state.packets.pop();
-    renderPacketList();
+    dirtyUi.packets = true;
+    scheduleSlowUi();
   }
 
   function logNmeaLine(line, isTx) {
     if (state.consolePaused) return;
     state.nmeaLines.push({ t: fmtTimeNow(), line, isTx });
     if (state.nmeaLines.length > 250) state.nmeaLines.shift();
-    const el = document.getElementById('conText');
-    if (el.style.display !== 'none') {
-      renderTextConsole();
-    }
+    dirtyUi.text = true;
+    scheduleSlowUi();
   }
 
   function logHexChunk(bytes, dir) {
     if (state.consolePaused) return;
-    const hex = [...bytes].slice(0, 48).map(b => b.toString(16).padStart(2, '0')).join(' ') + (bytes.length > 48 ? ' ...' : '');
-    const ascii = [...bytes].slice(0, 48).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+    const lim = Math.min(48, bytes.length);
+    let hex = '';
+    let ascii = '';
+    for (let i = 0; i < lim; i++) {
+      const b = bytes[i];
+      if (i > 0) hex += ' ';
+      hex += b.toString(16).padStart(2, '0');
+      ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+    }
+    if (bytes.length > 48) hex += ' ...';
     state.hexLines.push(`[${fmtTimeNow()}] ${dir} (${bytes.length}B): ${hex}  |${ascii}|`);
     if (state.hexLines.length > 180) state.hexLines.shift();
-    const el = document.getElementById('conHex');
-    if (el.style.display !== 'none') {
-      renderHexConsole();
-    }
+    dirtyUi.hex = true;
+    scheduleSlowUi();
   }
 
   function setAckBanner(ok, msg) {
@@ -5427,9 +5507,16 @@
     }).join('');
   }
 
+  function isConSectionVisible(sectionId) {
+    const pCon = document.getElementById('pCon');
+    const sec = document.getElementById(sectionId);
+    return Boolean(pCon && !pCon.classList.contains('hidden') && sec && sec.style.display !== 'none');
+  }
+
   function renderPacketList() {
+    if (!isConSectionVisible('conPackets')) return;
     const el = document.getElementById('pktList');
-    if (el.offsetParent === null) return;
+    if (!el) return;
     el.innerHTML = state.packets.map((p, idx) => `
       <div class="pkt-row ${idx === state.selectedPktIdx ? 'selected' : ''}" data-idx="${idx}">
         <span style="color:var(--text-muted)">${p.time}</span>
@@ -5442,6 +5529,7 @@
   }
 
   function renderTextConsole() {
+    if (!isConSectionVisible('conText')) return;
     const el = document.getElementById('conText');
     el.innerHTML = state.nmeaLines.map(it =>
       `<div class="nmea-line ${it.isTx ? 'tx' : ''}">[${it.t}] ${it.line.replace(/</g, '&lt;')}</div>`
@@ -5450,6 +5538,7 @@
   }
 
   function renderHexConsole() {
+    if (!isConSectionVisible('conHex')) return;
     const el = document.getElementById('conHex');
     el.textContent = state.hexLines.join('\n');
     el.scrollTop = el.scrollHeight;
@@ -6149,6 +6238,7 @@
           if (r.status === 'nak') {
             // Query individually so unsupported keys don't block supported ones
             for (const singleKey of chunk) {
+              if (!state.connected) break;
               await sendAndWait(encodeValget(0, [singleKey]), e => (e.cls === 0x06 && e.id === 0x8b) || (e.ackCls === 0x06 && e.ackId === 0x8b), 200);
             }
           }
@@ -6165,7 +6255,7 @@
     if (m.kind === 'nmea') {
       const sentence = buildNmeaSentence(`$EIGPQ,${m.nmeaId}`);
       logNmeaLine(sentence.trim(), true);
-      await writeSerial(new TextEncoder().encode(sentence));
+      await writeSerial(SHARED_TEXT_ENCODER.encode(sentence));
       setAckBanner(true, `Polled NMEA: $EIGPQ,${m.nmeaId}`);
     } else {
       await writeSerial(buildUbxFrame(m.cls, m.id, []));
@@ -6300,28 +6390,36 @@
     }
   }
 
+  let lastInspSig = '';
   function renderMsgInspector() {
     const pMsg = document.getElementById('pMessages');
     if (!pMsg || pMsg.classList.contains('hidden')) return;
     const m = MSG_BY_KEY[state.selectedMsgKey];
     if (!m) return;
     const st = state.msgStats[m.key];
+    const knownRate = state.msgRates[m.key];
+    const canRate = Boolean(m.uart1Key || m.infBit !== undefined || m.nmeaInf || getEffectiveGen() === 'm8');
+    const sig = `${m.key}|${st ? st.count : 0}|${st ? st.lastTs : 0}|${knownRate}|${state.connected}|${canRate}|${getActivePort()}`;
+    if (sig === lastInspSig) return;
+    lastInspSig = sig;
+
     const clsHex = `0x${m.cls.toString(16).padStart(2, '0').toUpperCase()}`;
     const idHex = `0x${m.id.toString(16).padStart(2, '0').toUpperCase()}`;
+    const rawBytes = st ? getMsgRawFrameBytes(m, st) : null;
+    const payLen = st && st.lastPayload ? st.lastPayload.length : (rawBytes ? rawBytes.length : null);
+    const utcStr = st && st.lastTs ? utcTimestampFromMs(st.lastTs) : '--';
 
     document.getElementById('inspMsgTitle').textContent = m.full;
     document.getElementById('inspMsgClsId').textContent = `${clsHex} ${idHex}`;
-    document.getElementById('inspMsgLen').textContent = `Len: ${st && st.lastPayload ? st.lastPayload.length + ' B' : '-- B'}`;
-    document.getElementById('inspMsgUtc').textContent = `UTC: ${st ? st.lastUtc : '--'}`;
+    document.getElementById('inspMsgLen').textContent = `Len: ${payLen !== null ? payLen + ' B' : '-- B'}`;
+    document.getElementById('inspMsgUtc').textContent = `UTC: ${utcStr}`;
     document.getElementById('inspMsgCount').textContent = `Count: ${st ? st.count : 0}`;
 
     const rateInput = document.getElementById('inpInspRate');
-    const knownRate = state.msgRates[m.key];
     if (document.activeElement !== rateInput && knownRate !== undefined && knownRate !== null) {
       rateInput.value = String(knownRate);
     }
 
-    const canRate = Boolean(m.uart1Key || m.infBit !== undefined || m.nmeaInf || getEffectiveGen() === 'm8');
     rateInput.disabled = !state.connected || !canRate;
     document.getElementById('btnInspSetRate').disabled = !state.connected || !canRate;
     document.querySelectorAll('button[data-qrate]').forEach(b => { b.disabled = !state.connected || !canRate; });
@@ -6344,7 +6442,6 @@
     }).join('');
 
     // Raw Hex + ASCII Viewer
-    const rawBytes = st ? (st.lastFrame || st.lastPayload) : null;
     document.getElementById('inspHexLabel').textContent = rawBytes
       ? `Raw Frame Hex & ASCII (${rawBytes.length} bytes)`
       : 'Raw Hex & ASCII (No packet received yet — click Poll or enable rate)';
@@ -6361,6 +6458,7 @@
     if (immediate || now - lastMsgDomRenderTs >= minInterval) {
       lastMsgDomRenderTs = now;
       if (msgDomTimer) { clearTimeout(msgDomTimer); msgDomTimer = null; }
+      if (immediate) lastInspSig = '';
       renderMsgTree();
       renderMsgInspector();
     } else if (!msgDomTimer) {
@@ -7134,7 +7232,7 @@
   document.getElementById('btnInspCopyHex').addEventListener('click', async () => {
     const m = MSG_BY_KEY[state.selectedMsgKey];
     const st = m ? state.msgStats[m.key] : null;
-    const raw = st ? (st.lastFrame || st.lastPayload) : null;
+    const raw = getMsgRawFrameBytes(m, st);
     if (!raw) return;
     const hex = [...raw].map(b => b.toString(16).padStart(2, '0')).join(' ');
     try { await navigator.clipboard.writeText(hex); } catch {}
@@ -7606,6 +7704,9 @@
     state.selectedPktIdx = parseInt(row.dataset.idx, 10);
     const pkt = state.packets[state.selectedPktIdx];
     if (pkt) {
+      if (pkt.rawHex === null && pkt.rawBytes) {
+        pkt.rawHex = Array.from(pkt.rawBytes, b => b.toString(16).padStart(2, '0')).join(' ');
+      }
       document.getElementById('pktDetail').textContent =
         `${pkt.time} [${pkt.proto}] ${pkt.msg} (${pkt.len} bytes)\n\n` +
         JSON.stringify(pkt.decoded, null, 2) +
@@ -7640,7 +7741,7 @@
 
   document.getElementById('btnTxNmea').addEventListener('click', () => {
     const sentence = buildNmeaSentence(document.getElementById('txNmeaBody').value);
-    const enc = new TextEncoder().encode(sentence);
+    const enc = SHARED_TEXT_ENCODER.encode(sentence);
     logNmeaLine(sentence.trim(), true);
     writeSerial(enc);
   });
@@ -7649,33 +7750,60 @@
   // 13. Render Loop & Periodic Rate Counter
   // =========================================================================
   let redrawPending = false;
-  function scheduleRedraw() {
-    if (redrawPending) return;
-    redrawPending = true;
-    requestAnimationFrame(() => {
-      redrawPending = false;
-      updateDataAndStatusDOM();
-      renderSkyview();
-      renderCn0Chart();
-      renderDeviationMap();
-      renderSlippyMap();
-      renderTimeSeries();
-      renderMonSpan();
-      scheduleMessagesRender(false);
-    });
+  let redrawTimer = null;
+  let lastRedrawTs = 0;
+  function runRenderFrame() {
+    redrawPending = false;
+    lastRedrawTs = performance.now();
+    updateDataAndStatusDOM();
+    renderSkyview();
+    renderCn0Chart();
+    renderDeviationMap();
+    renderSlippyMap();
+    renderTimeSeries();
+    renderMonSpan();
+    scheduleMessagesRender(false);
+    if (lastRedrawTs - lastSlowUiTs >= 100) {
+      flushSlowUi();
+    }
+  }
+  function scheduleRedraw(immediate = false) {
+    if (immediate) {
+      if (redrawTimer) { clearTimeout(redrawTimer); redrawTimer = null; }
+      if (!redrawPending) {
+        redrawPending = true;
+        requestAnimationFrame(runRenderFrame);
+      }
+      return;
+    }
+    if (redrawPending || redrawTimer) return;
+    const elapsed = performance.now() - lastRedrawTs;
+    const minInterval = 50; // Cap data-driven canvas/status redraws to 20 FPS
+    if (elapsed >= minInterval) {
+      redrawPending = true;
+      requestAnimationFrame(runRenderFrame);
+    } else {
+      redrawTimer = setTimeout(() => {
+        redrawTimer = null;
+        if (!redrawPending) {
+          redrawPending = true;
+          requestAnimationFrame(runRenderFrame);
+        }
+      }, minInterval - elapsed);
+    }
   }
 
   setInterval(() => {
     state.msgRate = state.msgCountWindow;
     state.msgCountWindow = 0;
     updateProtoToggleStates();
-    scheduleRedraw();
+    scheduleRedraw(true);
   }, 1000);
 
-  window.addEventListener('resize', scheduleRedraw);
+  window.addEventListener('resize', () => scheduleRedraw(true));
   updateConnectionUI();
   updateRateControlDisplay();
-  scheduleRedraw();
+  scheduleRedraw(true);
 })();
 </script>
 </body>
